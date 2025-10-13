@@ -1,0 +1,6 @@
+{
+  "cases": [
+    {"path": "samples/Safe.sol",        "expected": {"findings": [], "risk_score": 20}},
+    {"path": "samples/Reentrancy.sol",  "expected": {"findings": ["ReentrancyDemo"], "risk_score": 80}}
+  ]
+}

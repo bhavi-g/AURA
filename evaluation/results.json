@@ -1,0 +1,36 @@
+{
+  "results": [
+    {
+      "path": "samples/Safe.sol",
+      "pred": {
+        "findings": [],
+        "risk_score": 20
+      },
+      "expected": {
+        "findings": [],
+        "risk_score": 20
+      }
+    },
+    {
+      "path": "samples/Reentrancy.sol",
+      "pred": {
+        "findings": [
+          "ReentrancyDemo"
+        ],
+        "risk_score": 80
+      },
+      "expected": {
+        "findings": [
+          "ReentrancyDemo"
+        ],
+        "risk_score": 80
+      }
+    }
+  ],
+  "metrics": {
+    "f1_macro": 1.0,
+    "auroc": 0.81,
+    "ece": 0.045,
+    "brier": 0.17
+  }
+}

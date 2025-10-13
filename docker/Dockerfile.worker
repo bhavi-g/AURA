@@ -1,0 +1,7 @@
+
+FROM python:3.11-slim
+WORKDIR /worker
+COPY . /worker
+# Install tool deps here (slither, mythril, echidna) in real setup
+# RUN apt-get update && apt-get install -y ...
+# SECURITY: run with non-root user, read-only FS, limited caps

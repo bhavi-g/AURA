@@ -1,0 +1,22 @@
+
+risk_thresholds:
+  pass: 0.2
+  warning: 0.5
+  critical: 0.8
+  manual_review: 0.9
+
+compute_budget:
+  triage_timeout: 60
+  deep_analysis_timeout: 600
+  max_paths: 10000
+  max_fuzz_iterations: 100000
+
+model:
+  base_model: microsoft/codebert-base
+  lora_rank: 8
+  ensemble_members: 5
+  calibration: temperature
+
+chains:
+  supported: [ethereum, arbitrum, optimism, polygon]
+  planned: [solana]

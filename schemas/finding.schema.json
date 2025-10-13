@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AURA Finding",
+  "type": "object",
+  "required": [
+    "id",
+    "swc_id",
+    "severity",
+    "probability",
+    "location"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "swc_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL"
+      ]
+    },
+    "probability": {
+      "type": "number"
+    },
+    "calibrated_probability": {
+      "type": "number"
+    },
+    "expected_loss": {
+      "type": "number"
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "trace": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "snippet": {
+          "type": "string"
+        }
+      }
+    },
+    "recommendation": {
+      "type": "string"
+    },
+    "uncertainty": {
+      "type": "object",
+      "properties": {
+        "epistemic": {
+          "type": "number"
+        },
+        "aleatoric": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

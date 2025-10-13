@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AURA Report",
+  "type": "object",
+  "required": [
+    "version",
+    "summary",
+    "findings",
+    "metrics"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "risk_score": {
+          "type": "number"
+        },
+        "expected_loss": {
+          "type": "number"
+        },
+        "risk_band": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "finding.schema.json"
+      }
+    },
+    "artifacts": {
+      "type": "array"
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "type": "number"
+        },
+        "paths_explored": {
+          "type": "integer"
+        },
+        "runtime_sec": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}
