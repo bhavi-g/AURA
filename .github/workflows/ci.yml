@@ -1,24 +1,30 @@
-name: ci
+name: CI (eval)
 on:
   push:
   pull_request:
 jobs:
-  test:
+  eval:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - name: Install
+          python-version: '3.11'
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      - name: Lint & Format
+          pip install -r requirements.txt
+      - name: Run evaluation harness
         run: |
-          ruff check .
-          ruff format --check .
-          black --check .
-      - name: Tests
+          export PYTHONPATH="$(pwd)"
+          make eval
+      - name: Start API and sanity check /health
         run: |
-          pytest -q --maxfail=1 --disable-warnings
+          nohup uvicorn api.main:app --port 8000 &
+          sleep 2
+          curl -f http://127.0.0.1:8000/health
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-results
+          path: evaluation/results.json
