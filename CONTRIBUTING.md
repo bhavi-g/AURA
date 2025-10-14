@@ -1,6 +1,12 @@
-
 # Contributing to AURA
-- Run `pre-commit install`.
-- Write tests for any new feature or bug fix.
-- Keep functions short, pure where possible; document *why* in docstrings.
-- Open PRs with clear title, link to issue, and before/after metrics if relevant.
+
+## Prereqs
+- Python 3.11+
+- macOS/Linux recommended
+- `slither` and `mythril` optional for local runs (pipeline tests mock them)
+
+## Setup
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e .[dev]
+pre-commit install
