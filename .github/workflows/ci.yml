@@ -23,12 +23,20 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install -U pip
-          pip install -e .
-          pip install pytest requests pre-commit ruff isort black
+          # install package + dev/test tools (ruff, black, isort, pytest, httpx, etc.)
+          pip install -e ".[dev]"
 
-      - name: Pre-commit (check only)
-        run: pre-commit run -a --show-diff-on-failure --color always
+      # ---- Quality checks (check-only; no formatting in CI) ----
+      - name: Ruff (lint)
+        run: ruff check .
 
+      - name: Black (check)
+        run: black --check .
+
+      - name: isort (check)
+        run: isort --check-only .
+
+      # ---- Tests ----
       - name: Run tests
         env:
           PYTHONUNBUFFERED: "1"
