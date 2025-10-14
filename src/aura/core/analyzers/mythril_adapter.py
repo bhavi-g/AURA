@@ -1,9 +1,12 @@
 # src/aura/core/analyzers/mythril_adapter.py
+from __future__ import annotations
+
 import json
 import shlex
 import subprocess
+from typing import Any
 
-from .normalize import Finding
+Finding = dict[str, Any]
 
 _SEV = {"low": "LOW", "medium": "MEDIUM", "high": "HIGH", "critical": "CRITICAL"}
 
@@ -35,8 +38,7 @@ class MythrilAnalyzer:
         except json.JSONDecodeError:
             return []
 
-        issues = []
-        # Mythril JSON usually has {"issues": [...]}; be defensive
+        issues: list[Finding] = []
         root = data if isinstance(data, dict) else {}
         for it in root.get("issues", []):
             sev = _SEV.get(str(it.get("severity", "")).lower(), "LOW")
@@ -49,10 +51,9 @@ class MythrilAnalyzer:
             rule = it.get("swc-id") or it.get("check") or "SWC-000"
             category = rule if isinstance(rule, str) else "Unknown"
 
-            # locations: Mythril varies; try to extract a file/line
+            # best-effort locations
             locs = []
             for loc in it.get("locations", []):
-                # try common shapes
                 file = loc.get("filename") or loc.get("file") or target
                 line = int(loc.get("line")) if isinstance(loc.get("line"), int) else 1
                 locs.append({"file": file, "line": line})
@@ -62,18 +63,15 @@ class MythrilAnalyzer:
             issues.append(
                 {
                     "tool": "mythril",
-                    "rule_id": str(rule),
+                    "rule_id": rule,
                     "title": title,
                     "description": desc,
                     "severity": sev,
                     "confidence": "MEDIUM",
-                    "category": str(category),
+                    "category": category,
                     "locations": locs,
-                    "references": [
-                        u for u in it.get("externalReferences", []) if isinstance(u, str)
-                    ],
+                    "references": [],
                     "raw": it,
                 }
             )
-
         return issues
