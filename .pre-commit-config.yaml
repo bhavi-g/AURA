@@ -10,11 +10,10 @@ repos:
     hooks:
       - id: ruff
         args: ["--line-length=100"]
-      - id: ruff-format  # only for local dev; CI will not auto-fix
-        stages: [manual]
+      - id: ruff-format
 
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks:
       - id: isort
-        args: ["--profile", "black", "--line-length", "100"]
+        args: ["--profile=black", "--line-length=100"]
