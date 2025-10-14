@@ -40,4 +40,11 @@ jobs:
       - name: Run tests
         env:
           PYTHONUNBUFFERED: "1"
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest -q
+
+        - name: Import smoke check
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -c "import api, api.main; print('import ok')"
+
