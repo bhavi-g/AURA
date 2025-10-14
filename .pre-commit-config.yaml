@@ -8,9 +8,8 @@ repos:
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.14.0
     hooks:
-      - id: ruff
+      - id: ruff         # lint only
         args: ["--line-length=100"]
-      - id: ruff-format
 
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
