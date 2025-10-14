@@ -3,51 +3,51 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
-# Lazily create the engine so the DB path is resolved **after** tests change CWD.
-# This fixes the “.aura not found” issue when tests chdir into a tmp dir.
-
-AURA_HOME = Path(os.getenv("AURA_HOME", ".aura"))
-DB_URL = os.getenv("AURA_DB_URL", f"sqlite:///{AURA_HOME / 'aura.db'}")
-
-_engine = None  # created on first use
+# Lazily-created engine bound to the *current* DB path.
+_ENGINE: Engine | None = None
+_ENGINE_PATH: Path | None = None
 
 
-def _connect_args_for(url: str) -> dict:
-    # Needed for sqlite usage across threads (fine for CLI/API dev)
-    if url.startswith("sqlite:///"):
-        return {"check_same_thread": False}
-    return {}
+def _db_path() -> Path:
+    """
+    Resolve the SQLite DB path. Default: ./.aura/aura.db
+    Override the base dir with AURA_DB_DIR if set.
+    """
+    base = Path(os.environ.get("AURA_DB_DIR", ".aura"))
+    return base / "aura.db"
 
 
-def get_engine():
-    """Return a singleton SQLModel engine, creating the .aura dir if sqlite is used."""
-    global _engine
-    if _engine is None:
-        # Ensure parent dir exists for sqlite DBs, **in the current CWD**.
-        if DB_URL.startswith("sqlite:///"):
-            AURA_HOME.mkdir(parents=True, exist_ok=True)
-        _engine = create_engine(DB_URL, echo=False, connect_args=_connect_args_for(DB_URL))
-    return _engine
+def _get_engine() -> Engine:
+    """
+    Create (or reuse) an Engine for the current DB path.
+    If the working directory or env var changes, recreate the engine.
+    """
+    global _ENGINE, _ENGINE_PATH
+    path = _db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)  # ensure .aura/ exists
+
+    if _ENGINE is None or _ENGINE_PATH != path:
+        _ENGINE_PATH = path
+        _ENGINE = create_engine(
+            f"sqlite:///{path}",
+            echo=False,
+            connect_args={"check_same_thread": False},
+        )
+    return _ENGINE
 
 
 def init_db() -> None:
-    """Create tables if they don't exist and ensure local .aura/ exists.
-
-    Tests and some tooling expect a .aura/ folder in the CWD regardless of
-    where the DB actually lives, so we always create it.
-    """
-    # Ensure the conventional local folder exists for artifacts/tests
-    Path(".aura").mkdir(parents=True, exist_ok=True)
-
-    eng = get_engine()
-    SQLModel.metadata.create_all(eng)
+    """Create tables if they don't exist (ensures .aura/ exists too)."""
+    engine = _get_engine()
+    SQLModel.metadata.create_all(engine)
 
 
 def get_session() -> Session:
     """
     Return a Session with expire_on_commit disabled so ORM objects
-    remain accessible after commit. The Session itself supports `with` usage.
+    can be accessed after the session closes.
     """
-    return Session(get_engine(), expire_on_commit=False)
+    return Session(_get_engine(), expire_on_commit=False)
