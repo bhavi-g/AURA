@@ -1,20 +1,18 @@
-import subprocess
-import sys
+from typer.testing import CliRunner
+
+from aura.cli import app
 
 
-def run_cli(args):
-    return subprocess.run(
-        [sys.executable, "-m", "aura.cli", *args],
-        capture_output=True,
-        text=True,
+def test_cli_analyze(monkeypatch, temp_cwd, sample_contract, fake_slither_findings):
+    from aura.core.analyzers import slither_adapter
+
+    monkeypatch.setattr(
+        slither_adapter.SlitherAnalyzer,
+        "run",
+        lambda self, target: fake_slither_findings,
     )
 
-
-def test_hello():
-    out = run_cli(["hello", "--name", "AURA"]).stdout
-    assert "Hello, AURA" in out
-
-
-def test_version():
-    out = run_cli(["version"]).stdout
-    assert "AURA v" in out
+    runner = CliRunner()
+    result = runner.invoke(app, ["analyze", str(sample_contract)])
+    assert result.exit_code == 0
+    assert "Findings:" in result.stdout
