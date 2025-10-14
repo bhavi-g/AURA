@@ -6,10 +6,28 @@ build-backend = "setuptools.build_meta"
 name = "aura"
 version = "0.0.0"
 requires-python = ">=3.11"
-dependencies = ["fastapi", "uvicorn", "typer"]
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "typer",
+  "sqlmodel>=0.0.22",
+  "sqlalchemy>=2.0",
+  "pydantic>=2.0",
+]
 
 [project.scripts]
 aura = "aura.cli:app"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "httpx>=0.27",       # Starlette TestClient dependency
+  "requests>=2.31",
+  "pre-commit>=3.7",
+  "ruff>=0.4",
+  "black>=24",
+  "isort>=5.12",
+]
 
 [tool.setuptools.package-dir]
 "" = "src"
@@ -47,7 +65,6 @@ skip = [".venv", ".aura", "reports", "build", "dist", "node_modules"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-# keep tools away from non-source dirs
 exclude = [".git", ".venv", "build", "dist", ".aura", "reports", "node_modules"]
 
 [tool.ruff.lint]
@@ -55,7 +72,7 @@ exclude = [".git", ".venv", "build", "dist", ".aura", "reports", "node_modules"]
 select = ["E", "F", "B", "UP", "T20"]
 ignore = []
 
-# If you want to allow prints in certain scripts, uncomment below:
+# If you want to allow prints in certain scripts, uncomment:
 # [tool.ruff.lint.per-file-ignores]
 # "cli/*.py" = ["T201"]
 # "evaluation/*.py" = ["T201"]

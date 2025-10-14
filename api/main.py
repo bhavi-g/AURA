@@ -1,9 +1,10 @@
+from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from aura.core.pipeline import run_analysis  # <-- uses your new pipeline
+from aura.core.pipeline import run_analysis
 
 app = FastAPI(title="AURA API")
 
@@ -43,6 +44,7 @@ def get_report(audit_id: str):
     return {"status": "ready", "report": {"summary": "ok"}}
 
 
+# ---- Analyze endpoint used by tests ----
 class AnalyzeReq(BaseModel):
     path: str
     project: str = "default"
@@ -50,5 +52,16 @@ class AnalyzeReq(BaseModel):
 
 @app.post("/analyze")
 def analyze(req: AnalyzeReq):
-    res = run_analysis(req.path, project_name=req.project)
-    return {"score": res["score"], "reports": res["reports"], "n_findings": len(res["findings"])}
+    # Validate path early; tests expect a 400 for non-existent paths
+    p = Path(req.path)
+    if not p.exists():
+        raise HTTPException(status_code=400, detail=f"path not found: {req.path}")
+
+    # run analysis (pipeline signature: (target, project_name))
+    res = run_analysis(req.path, req.project)
+
+    return {
+        "score": res["score"],
+        "reports": res["reports"],
+        "n_findings": res.get("n_findings", len(res.get("findings", []))),
+    }
