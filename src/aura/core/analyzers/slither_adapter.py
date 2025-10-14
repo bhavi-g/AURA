@@ -6,14 +6,13 @@ import re
 import shlex
 import shutil
 import subprocess
+from typing import Any
 
-# If you have a Finding TypedDict, import it; otherwise we’ll return dicts.
-# from .normalize import Finding
-
-Finding = dict  # keep it simple/compatible
+Finding = dict[str, Any]  # simple, test-friendly shape
 
 
 def _run_cmd(cmd: str, timeout: int = 120) -> str:
+    """Run a shell command, returning stdout (even on non-zero exit)."""
     try:
         return subprocess.check_output(
             cmd, shell=True, text=True, stderr=subprocess.STDOUT, timeout=timeout
@@ -32,11 +31,9 @@ def _extract_json_block(text: str) -> str:
     """
     if not text:
         return ""
-    # Quick path: already clean JSON
     s = text.strip()
     if s.startswith("{") and s.endswith("}"):
         return s
-    # Fallback: grab the last balanced JSON object
     m = re.search(r"\{(?:.|\n)*\}\s*$", text)
     return m.group(0) if m else ""
 
@@ -50,7 +47,7 @@ class SlitherAnalyzer:
         """
         cmds: list[str] = []
 
-        # Prefer a real slither on PATH (your venv one)
+        # Prefer a real slither on PATH (venv)
         if shutil.which("slither"):
             cmds.append(f"slither {shlex.quote(target)} --json -")
 
@@ -63,7 +60,7 @@ class SlitherAnalyzer:
             if raw_out.strip():
                 break
 
-        # --- STEP 2: dump raw output for debugging ---
+        # Dump raw output for debugging (best-effort)
         try:
             import os
 
@@ -72,7 +69,6 @@ class SlitherAnalyzer:
                 fh.write(raw_out or "")
         except Exception:
             pass
-        # --------------------------------------------
 
         if not raw_out.strip():
             return []
@@ -124,7 +120,7 @@ class SlitherAnalyzer:
                 }
             )
 
-        # Optional: also dump our normalized findings for quick inspection
+        # Also dump normalized findings (best-effort)
         try:
             with open("reports/slither_parsed.json", "w") as fh:
                 json.dump(findings, fh, indent=2)
