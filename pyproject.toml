@@ -1,26 +1,61 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aura"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = ["fastapi", "uvicorn", "typer"]
+
+[project.scripts]
+aura = "aura.cli:app"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["aura*"]
+
+# ------------------------------
+# Formatting / Linting toolchain
+# ------------------------------
+
 [tool.black]
 line-length = 100
 target-version = ["py311"]
-exclude = '''
+extend-exclude = '''
 (
   ^\.git
 | ^\.venv
 | ^build
 | ^dist
+| ^\.aura
+| ^reports
+| ^node_modules
 )
 '''
 
 [tool.isort]
 profile = "black"
 line_length = 100
+src_paths = ["src", "api", "cli", "tests"]
+known_first_party = ["aura"]
+skip = [".venv", ".aura", "reports", "build", "dist", "node_modules"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+# keep tools away from non-source dirs
+exclude = [".git", ".venv", "build", "dist", ".aura", "reports", "node_modules"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "T20"]
+# Let isort own import sorting. Do NOT include "I" here.
+select = ["E", "F", "B", "UP", "T20"]
 ignore = []
 
-[tool.ruff.lint.per-file-ignores]
-"evaluation/*.py" = ["T201"]  # allow prints in CLI eval scripts
+# If you want to allow prints in certain scripts, uncomment below:
+# [tool.ruff.lint.per-file-ignores]
+# "cli/*.py" = ["T201"]
+# "evaluation/*.py" = ["T201"]

@@ -4,12 +4,12 @@ import typer
 
 from aura.core.pipeline import run_analysis
 
-app = typer.Typer(help="AURA CLI", add_completion=False)
+app = typer.Typer(help="AURA CLI (alt entry)", add_completion=False)
 
 
 @app.command()
 def hello(name: str | None = typer.Option("world", "--name", "-n", help="Name to greet")) -> None:
-    """Say hello (used by tests)."""
+    """Say hello."""
     typer.echo(f"Hello, {name}!")
 
 
@@ -29,7 +29,6 @@ def _version_callback(value: bool | None) -> None:
             v = metadata.version("aura")
         except metadata.PackageNotFoundError:
             v = "0.0.0-dev"
-        # tests that call `-m aura.cli --version` expect just the raw version
         typer.echo(v)
         raise typer.Exit()
 
@@ -45,15 +44,11 @@ def _root(
         is_eager=True,
     )
 ) -> None:
-    # no-op root; options handled via callback
     return
 
 
 @app.command("analyze")
-def analyze(
-    target: str,
-    project: str = typer.Option("default", "--project", "-p"),
-) -> None:
+def analyze(target: str, project: str = typer.Option("default", "--project", "-p")) -> None:
     """Run analyzers and print a tiny summary."""
     res = run_analysis(target, project_name=project)
     findings = res.get("findings", [])
