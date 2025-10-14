@@ -11,8 +11,10 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -20,31 +22,23 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install deps
+      - name: Install package + dev extras
         run: |
           python -m pip install -U pip
-          # install package + dev/test tools (ruff, black, isort, pytest, httpx, etc.)
-          pip install -e ".[dev]"
+          # installs aura in editable mode and all dev/test deps declared in pyproject
+          pip install -e .[dev]
 
-      # ---- Quality checks (check-only; no formatting in CI) ----
-      - name: Ruff (lint)
-        run: ruff check .
+      - name: Pre-commit (check only)
+        run: pre-commit run -a --show-diff-on-failure --color always
 
-      - name: Black (check)
-        run: black --check .
+      - name: Import smoke check
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -c "import api, api.main; import aura; print('imports ok')"
 
-      - name: isort (check)
-        run: isort --check-only .
-
-      # ---- Tests ----
       - name: Run tests
         env:
+          PYTHONPATH: ${{ github.workspace }}
           PYTHONUNBUFFERED: "1"
-          PYTHONPATH: ${{ github.workspace }}
         run: pytest -q
-
-        - name: Import smoke check
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: python -c "import api, api.main; print('import ok')"
-
