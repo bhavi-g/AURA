@@ -4,14 +4,17 @@ repos:
     hooks:
       - id: black
         args: ["--line-length=100"]
+
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.14.0
     hooks:
       - id: ruff
-        args: ["--fix", "--exit-non-zero-on-fix"]
-      - id: ruff-format
+        args: ["--line-length=100"]
+      - id: ruff-format  # only for local dev; CI will not auto-fix
+        stages: [manual]
+
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks:
       - id: isort
-        args: ["--profile=black", "--line-length=100"]
+        args: ["--profile", "black", "--line-length", "100"]
