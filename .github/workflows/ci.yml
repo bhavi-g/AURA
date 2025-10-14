@@ -12,7 +12,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      # Make top-level "api/" importable (and any other non-src dirs you use)
       PYTHONPATH: ${{ github.workspace }}
       PYTHONUNBUFFERED: "1"
     steps:
@@ -31,7 +30,6 @@ jobs:
           python -m pip install -U pip
           pip install -e ".[dev]"
 
-      # ---- Lint/format checks (verify-only) ----
       - name: Ruff (lint)
         run: ruff check .
 
@@ -41,15 +39,14 @@ jobs:
       - name: isort (import order check)
         run: isort --check-only .
 
-      # ---- Quick import sanity check ----
       - name: Import smoke check
-        run: python - <<'PY'
-from importlib import import_module
-import_module("api.main")
-import_module("aura.core.pipeline")
-print("import OK")
-PY
+        run: |
+          python - <<'PY'
+          from importlib import import_module
+          import_module("api.main")
+          import_module("aura.core.pipeline")
+          print("import OK")
+          PY
 
-      # ---- Tests ----
       - name: Run tests
         run: pytest -q
