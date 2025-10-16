@@ -32,8 +32,7 @@ artifacts:
 
 .PHONY: analyze-samples
 analyze-samples:
-	. .venv/bin/activate && (command -v aura >/dev/null 2>&1 && aura --src samples --out reports || python -m aura --src samples --out reports)
-
+	@mkdir -p reports
+	. .venv/bin/activate && (aura analyze samples || python -m aura analyze samples) | tee reports/cli_analyze_summary.txt
 .PHONY: strict
-strict:
-	. .venv/bin/activate && (command -v aura >/dev/null 2>&1 && aura --src samples --out reports --strict || python -m aura --src samples --out reports --strict)
+strict: analyze-samples

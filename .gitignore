@@ -23,3 +23,8 @@ reports/slither_parsed.json
 # Local run summaries
 /summary.json
 /summary.md
+
+# Analyzer outputs
+/reports/slither_*.json
+/reports/slither_*.txt
+/reports/cli_analyze_summary.txt
