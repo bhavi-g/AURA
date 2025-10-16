@@ -1,3 +1,5 @@
 fastapi
 uvicorn
 pydantic
+PyYAML>=6.0
+pre-commit>=3.7
