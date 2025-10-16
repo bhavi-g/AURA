@@ -11,3 +11,6 @@ build/
 .aura/
 reports/slither_raw.txt
 reports/slither_parsed.json
+
+# Local reports
+/aura-reports/
