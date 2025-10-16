@@ -14,3 +14,12 @@ reports/slither_parsed.json
 
 # Local reports
 /aura-reports/
+
+# Local output / CI artifacts
+/artifacts/
+/ci_artifacts/
+/aura-reports/
+
+# Local run summaries
+/summary.json
+/summary.md
