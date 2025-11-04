@@ -1,5 +1,7 @@
 import json
 
+from sqlmodel import select
+
 from .db import get_session, init_db
 from .models import Artifact
 from .models import Finding as FModel
@@ -11,7 +13,7 @@ def ensure_entities(
 ) -> tuple[Project, Artifact, Run]:
     init_db()
     with get_session() as s:
-        proj = s.query(Project).filter(Project.name == project_name).one_or_none()
+        proj = s.exec(select(Project).where(Project.name == project_name)).one_or_none()
         if not proj:
             proj = Project(name=project_name)
             s.add(proj)
