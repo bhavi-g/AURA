@@ -1,48 +1,31 @@
 name: upload-sarif
+
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   analyze:
+    permissions:
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
-      # Install your package (src/ layout) + deps
-      - name: Install project
+          python-version: '3.13'
+      - name: Install
         run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          # optional: if you have a requirements.txt, keep this:
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      # Slither + Mythril + solc
-      - name: Install analyzers & solc
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+      - name: Analyze (produce SARIF)
         run: |
-          pip install slither-analyzer mythril solc-select
-          solc-select install 0.8.30
-          solc-select use 0.8.30
-          solc --version
-          slither --version || true
-
-      # Run analysis + reporting
-      - name: Analyze repo samples
-        env:
-          PYTHONPATH: src
-        run: |
-          python -m aura analyze samples/contracts -p ci
+          python -m aura analyze samples/contracts -p week3-smoke
           python tools/post_analyze.py
-          ls -lh reports
-
-      # Upload SARIF to GitHub Security tab
-      - name: Upload SARIF
+          test -f reports/summary.sarif
+      - name: Upload SARIF to code scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: reports/summary.sarif
