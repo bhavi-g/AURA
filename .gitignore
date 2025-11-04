@@ -25,3 +25,12 @@ reports/index.md
 reports/metrics.json
 reports/*/
 !reports/golden/
+
+# AURA reports (generated)
+reports/*.sarif
+reports/index.md
+reports/metrics.json
+reports/*/
+!reports/golden/
+reports/summary.md
+reports/summary.json
