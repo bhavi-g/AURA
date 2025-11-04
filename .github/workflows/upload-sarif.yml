@@ -4,18 +4,44 @@ on:
   push:
     branches: [ main ]
   pull_request:
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt || true
-      - run: pip install slither-analyzer mythril || true
-      - run: python -m aura analyze samples/contracts -p ci
-      - run: python tools/post_analyze.py
+
+      # Install your package (src/ layout) + deps
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          # optional: if you have a requirements.txt, keep this:
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # Slither + Mythril + solc
+      - name: Install analyzers & solc
+        run: |
+          pip install slither-analyzer mythril solc-select
+          solc-select install 0.8.30
+          solc-select use 0.8.30
+          solc --version
+          slither --version || true
+
+      # Run analysis + reporting
+      - name: Analyze repo samples
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m aura analyze samples/contracts -p ci
+          python tools/post_analyze.py
+          ls -lh reports
+
+      # Upload SARIF to GitHub Security tab
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
