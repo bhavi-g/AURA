@@ -1,0 +1,222 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "AURA",
+          "informationUri": "https://github.com/bhavi-g/AURA"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "solc-version",
+          "level": "note",
+          "message": {
+            "text": "Version constraint ^0.8.13 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)\n\t- VerbatimInvalidDeduplication\n\t- FullInlinerNonExpressionSplitArgumentEvaluationOrder\n\t- MissingSideEffectsOnSelectorAccess\n\t- StorageWriteRemovalBeforeConditionalTermination\n\t- AbiReencodingHeadOverflowWithStaticArrayCleanup\n\t- DirtyBytesArrayToStorage\n\t- InlineAssemblyMemorySideEffects\n\t- DataLocationChangeInInternalOverride\n\t- NestedCalldataArrayAbiReencodingSizeValidation.\nIt is used by:\n\t- ^0.8.13 (samples/contracts/UncheckedMath.sol#2)\n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/UncheckedMath.sol"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        },
+        {
+          "ruleId": "arbitrary-send-eth",
+          "level": "error",
+          "message": {
+            "text": "Wallet.withdraw(address) (samples/contracts/TxOriginAuth.sol#6-9) sends eth to arbitrary user\n\tDangerous calls:\n\t- to.transfer(address(this).balance) (samples/contracts/TxOriginAuth.sol#8)\n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/TxOriginAuth.sol"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        },
+        {
+          "ruleId": "tx-origin",
+          "level": "warning",
+          "message": {
+            "text": "Wallet.withdraw(address) (samples/contracts/TxOriginAuth.sol#6-9) uses tx.origin for authorization: require(bool,string)(tx.origin == owner,not owner) (samples/contracts/TxOriginAuth.sol#7)\n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/TxOriginAuth.sol"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        },
+        {
+          "ruleId": "missing-zero-check",
+          "level": "note",
+          "message": {
+            "text": "Wallet.withdraw(address).to (samples/contracts/TxOriginAuth.sol#6) lacks a zero-check on :\n\t\t- to.transfer(address(this).balance) (samples/contracts/TxOriginAuth.sol#8)\n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/TxOriginAuth.sol"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        },
+        {
+          "ruleId": "solc-version",
+          "level": "note",
+          "message": {
+            "text": "Version constraint ^0.8.13 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)\n\t- VerbatimInvalidDeduplication\n\t- FullInlinerNonExpressionSplitArgumentEvaluationOrder\n\t- MissingSideEffectsOnSelectorAccess\n\t- StorageWriteRemovalBeforeConditionalTermination\n\t- AbiReencodingHeadOverflowWithStaticArrayCleanup\n\t- DirtyBytesArrayToStorage\n\t- InlineAssemblyMemorySideEffects\n\t- DataLocationChangeInInternalOverride\n\t- NestedCalldataArrayAbiReencodingSizeValidation.\nIt is used by:\n\t- ^0.8.13 (samples/contracts/TxOriginAuth.sol#2)\n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/TxOriginAuth.sol"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        },
+        {
+          "ruleId": "immutable-states",
+          "level": "note",
+          "message": {
+            "text": "Wallet.owner (samples/contracts/TxOriginAuth.sol#4) should be immutable \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/TxOriginAuth.sol"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        },
+        {
+          "ruleId": "reentrancy-eth",
+          "level": "error",
+          "message": {
+            "text": "Reentrancy in Vault.withdraw() (samples/contracts/Reentrancy.sol#6-11):\n\tExternal calls:\n\t- (ok,None) = msg.sender.call{value: amount}() (samples/contracts/Reentrancy.sol#8)\n\tState variables written after the call(s):\n\t- balances[msg.sender] = 0 (samples/contracts/Reentrancy.sol#10)\n\tVault.balances (samples/contracts/Reentrancy.sol#4) can be used in cross function reentrancies:\n\t- Vault.balances (samples/contracts/Reentrancy.sol#4)\n\t- Vault.deposit() (samples/contracts/Reentrancy.sol#5)\n\t- Vault.withdraw() (samples/contracts/Reentrancy.sol#6-11)\n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/Reentrancy.sol"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        },
+        {
+          "ruleId": "solc-version",
+          "level": "note",
+          "message": {
+            "text": "Version constraint ^0.8.13 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)\n\t- VerbatimInvalidDeduplication\n\t- FullInlinerNonExpressionSplitArgumentEvaluationOrder\n\t- MissingSideEffectsOnSelectorAccess\n\t- StorageWriteRemovalBeforeConditionalTermination\n\t- AbiReencodingHeadOverflowWithStaticArrayCleanup\n\t- DirtyBytesArrayToStorage\n\t- InlineAssemblyMemorySideEffects\n\t- DataLocationChangeInInternalOverride\n\t- NestedCalldataArrayAbiReencodingSizeValidation.\nIt is used by:\n\t- ^0.8.13 (samples/contracts/Reentrancy.sol#2)\n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/Reentrancy.sol"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        },
+        {
+          "ruleId": "low-level-calls",
+          "level": "note",
+          "message": {
+            "text": "Low level call in Vault.withdraw() (samples/contracts/Reentrancy.sol#6-11):\n\t- (ok,None) = msg.sender.call{value: amount}() (samples/contracts/Reentrancy.sol#8)\n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "samples/contracts/Reentrancy.sol"
+                },
+                "region": {
+                  "startLine": 6
+                }
+              }
+            }
+          ],
+          "properties": {
+            "score": 0,
+            "tool": "slither"
+          }
+        }
+      ]
+    }
+  ]
+}
