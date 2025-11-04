@@ -1,0 +1,5 @@
+[
+  {"rule_id":"reentrancy-eth","severity":"HIGH","category":"reentrancy","locations":[{"file":"Reentrancy.sol","line":6}],"title":"reentrancy-eth"},
+  {"rule_id":"tx-origin","severity":"MEDIUM","category":"auth","locations":[{"file":"TxOriginAuth.sol","line":6}],"title":"tx-origin"},
+  {"rule_id":"solc-version","severity":"LOW","category":"solc-version","locations":[{"file":"Reentrancy.sol","line":2}],"title":"solc-version"}
+]
