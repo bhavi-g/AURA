@@ -7,24 +7,44 @@ on:
 
 jobs:
   analyze:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
-    runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install
+
+      - name: Install solc via solc-select
+        run: |
+          sudo apt-get update -y
+          curl -L https://raw.githubusercontent.com/crytic/solc-select/master/install.sh | sudo bash
+          solc-select install 0.8.30
+          solc-select use 0.8.30
+          solc --version
+
+      - name: Install package (editable) + dev deps
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install -U pip
           pip install -e ".[dev]"
+          # Ensure slither is present (some environments don't pull it transitively)
+          pip install slither-analyzer
+
       - name: Analyze (produce SARIF)
         run: |
           python -m aura analyze samples/contracts -p week3-smoke
           python tools/post_analyze.py
+          ls -l reports || true
           test -f reports/summary.sarif
+
       - name: Upload SARIF to code scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
