@@ -22,3 +22,10 @@ This pack implements your code-quality, testing, performance, architecture, secu
 
 
 CI ping: Mon 13 Oct 2025 23:55:39 EDT
+
+## Quickstart
+
+Run analyzers and generate reports:
+```bash
+python -m aura analyze samples/contracts -p week3-smoke
+python tools/post_analyze.py
