@@ -1,0 +1,12 @@
+{
+  "target": "samples/contracts",
+  "project": "benchmark",
+  "runs": 2,
+  "durations_sec": [
+    0.31268625002121553,
+    0.19414379098452628
+  ],
+  "avg_duration_sec": 0.2534150205028709,
+  "n_findings_last_run": 9,
+  "score_last_run": 13.01
+}
