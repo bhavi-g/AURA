@@ -9,6 +9,7 @@ from typing import Annotated
 import typer
 
 from aura.core.evaluation import evaluate
+from aura.core.explain import summarize_findings
 from aura.core.pipeline import run_analysis
 
 # =========================================================
@@ -71,13 +72,29 @@ def _root(
 @app.command("analyze")
 def analyze(
     target: str,
-    project: str = typer.Option("default", "--project", "-p"),
+    project: str = typer.Option(
+        "default",
+        "--project",
+        "-p",
+        help="Project name used for persistence",
+    ),
+    json_out: bool = typer.Option(
+        False,
+        "--json",
+        help="Output full JSON result instead of a short summary",
+    ),
 ) -> None:
-    """Run analyzers and print a tiny summary."""
+    """Run analyzers and print a tiny summary or JSON."""
     res = run_analysis(target, project_name=project)
-    findings = res.get("findings", [])
-    score = res.get("score", 0)
-    typer.echo(f"Findings: {len(findings)} | Score: {score}")
+
+    if json_out:
+        # Full machine-readable output
+        typer.echo(json.dumps(res, indent=2, default=str))
+    else:
+        # Backwards-compatible summary (tests expect this style)
+        findings = res.get("findings", [])
+        score = res.get("score", 0)
+        typer.echo(f"Findings: {len(findings)} | Score: {score}")
 
 
 # ---------------------------------------------------------
@@ -228,6 +245,38 @@ def benchmark_cmd(
 
     typer.echo(f"Wrote benchmark → {out}")
     typer.echo(f"avg={avg:.4f}s over {runs} run(s)")
+
+
+# ---------------------------------------------------------
+# WEEK 6: Explain command (natural-language summary)
+# ---------------------------------------------------------
+
+
+@app.command("explain")
+def explain_cmd(
+    target: str,
+    project: str = typer.Option(
+        "default",
+        "--project",
+        "-p",
+        help="Project name used for persistence",
+    ),
+    max_items: int = typer.Option(
+        3,
+        "--max-items",
+        "-n",
+        min=1,
+        help="How many top issues to include in the explanation",
+    ),
+) -> None:
+    """
+    Run analysis and print a simple natural-language explanation
+    of the most important findings.
+    """
+    res = run_analysis(target, project_name=project)
+    findings = res.get("findings", [])
+    summary = summarize_findings(findings, max_items=max_items)
+    typer.echo(summary)
 
 
 # ---------------------------------------------------------
