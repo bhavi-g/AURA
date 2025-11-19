@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 
-from aura.core.explain import summarize_findings
+from aura.core.explain import async_explain_target_with_llm, summarize_findings
 from aura.core.pipeline import run_analysis
 
 SEVERITY_ORDER = {
@@ -202,4 +202,29 @@ def explain(req: ExplainReq):
         "n_findings": res.get("n_findings", len(findings)),
         "score": res.get("score"),
         "top_findings": simplified_top,
+    }
+
+
+# ---- LLM-powered explain endpoint ----
+class ExplainLLMReq(BaseModel):
+    path: str
+    project: str = "default"
+    max_items: int = 3
+
+
+@app.post("/explain-llm")
+async def explain_llm(req: ExplainLLMReq):
+    # Validate path early
+    p = Path(req.path)
+    if not p.exists():
+        raise HTTPException(status_code=400, detail=f"path not found: {req.path}")
+
+    explanation = await async_explain_target_with_llm(
+        target=req.path,
+        project=req.project,
+        max_items=req.max_items,
+    )
+
+    return {
+        "explanation": explanation,
     }

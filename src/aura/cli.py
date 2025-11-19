@@ -9,7 +9,8 @@ from typing import Annotated
 import typer
 
 from aura.core.evaluation import evaluate
-from aura.core.explain import summarize_findings
+from aura.core.explain import build_llm_explanation_prompt, summarize_findings
+from aura.core.llm import LLM
 from aura.core.pipeline import run_analysis
 
 # =========================================================
@@ -277,6 +278,53 @@ def explain_cmd(
     findings = res.get("findings", [])
     summary = summarize_findings(findings, max_items=max_items)
     typer.echo(summary)
+
+
+@app.command("explain-llm")
+def explain_llm_cmd(
+    target: str,
+    project: str = typer.Option(
+        "default",
+        "--project",
+        "-p",
+        help="Project name used for persistence",
+    ),
+    max_items: int = typer.Option(
+        3,
+        "--max-items",
+        "-n",
+        min=1,
+        help="How many top issues to include in the LLM explanation",
+    ),
+) -> None:
+    """
+    Run analysis and ask the LLM to produce a natural-language explanation
+    of the most important findings.
+
+    Uses a stubbed LLM if no real API key is configured.
+    """
+    res = run_analysis(target, project_name=project)
+    findings = res.get("findings", [])
+
+    prompt = build_llm_explanation_prompt(findings, max_items=max_items)
+    llm = LLM()
+    explanation = llm.complete(prompt)
+
+    typer.echo(explanation)
+
+
+@app.command("llm")
+def llm_cmd(
+    prompt: str = typer.Argument(..., help="Prompt to send to the LLM"),
+) -> None:
+    """
+    Send a quick prompt to the configured LLM and print the response.
+
+    This is mainly a debug / smoke-test command for Week 7.
+    """
+    llm = LLM()
+    reply = llm.complete(prompt)
+    typer.echo(reply)
 
 
 # ---------------------------------------------------------
