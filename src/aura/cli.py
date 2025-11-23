@@ -269,13 +269,35 @@ def explain_cmd(
         min=1,
         help="How many top issues to include in the explanation",
     ),
+    output_format: str = typer.Option(
+        "text",
+        "--format",
+        "-f",
+        help="Output format: 'text' (default) or 'json'.",
+    ),
 ) -> None:
     """
-    Run analysis and print a simple natural-language explanation
-    of the most important findings.
+    Run analysis and print a simple explanation of the most important findings.
+
+    - format='text' -> human-readable summary (current behaviour)
+    - format='json' -> machine-readable JSON payload
     """
     res = run_analysis(target, project_name=project)
     findings = res.get("findings", [])
+
+    # JSON mode: return a structured payload
+    if output_format.lower() == "json":
+        payload = {
+            "target": target,
+            "project": project,
+            "total_issues": len(findings),
+            "max_items": max_items,
+            "findings": findings[:max_items],
+        }
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
+    # Text mode: keep existing behaviour using summarize_findings
     summary = summarize_findings(findings, max_items=max_items)
     typer.echo(summary)
 
