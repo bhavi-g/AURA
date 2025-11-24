@@ -120,6 +120,70 @@ Do not invent findings that are not listed above.
     return prompt.strip()
 
 
+def build_llm_remediation_prompt(findings, max_items: int = 3) -> str:
+    """
+    Build an LLM prompt that asks for both explanations AND concrete fix suggestions
+    for the top findings.
+
+    This is intentionally self-contained so it doesn't affect existing tests.
+    """
+    if not findings:
+        return (
+            "You are an expert smart contract security auditor.\n\n"
+            "The static analyzers found no issues in this contract. "
+            "Confirm that there are no obvious security problems and briefly mention "
+            "any general best practices that still apply."
+        )
+
+    top = findings[: max_items or 3]
+
+    issues_block_lines: list[str] = []
+    for idx, f in enumerate(top, start=1):
+        rule_id = f.get("rule_id") or f.get("check") or f.get("category") or "unknown"
+        title = f.get("title") or rule_id
+        severity = f.get("severity", "UNKNOWN")
+        score = f.get("score")
+        description = (f.get("description") or "").strip()
+
+        if len(description) > 800:
+            description = description[:800] + "... (truncated)"
+
+        issues_block_lines.append(
+            f"Issue {idx}:\n"
+            f"- Rule: {rule_id}\n"
+            f"- Title: {title}\n"
+            f"- Severity: {severity}\n"
+            f"- Score: {score}\n"
+            f"- Description:\n{description}\n"
+        )
+
+    issues_block = "\n".join(issues_block_lines)
+
+    prompt = (
+        "You are an expert smart contract security auditor.\n\n"
+        "The AURA static analyzers have detected the following issues in a Solidity "
+        "contract. For EACH issue, you must:\n"
+        "  1) Briefly restate the issue in plain language.\n"
+        "  2) Explain the impact and how an attacker could realistically exploit it.\n"
+        "  3) Provide concrete remediation steps in bullet points, including code-level\n"
+        "     changes or patterns to apply (e.g., checks-effects-interactions, using\n"
+        "     reentrancy guards, avoiding low-level calls, validating inputs, etc.).\n\n"
+        "Be concise but precise. Assume the reader understands Solidity but is not an\n"
+        "expert auditor.\n\n"
+        "Issues:\n"
+        f"{issues_block}\n\n"
+        "Now produce your answer in the following structure for EACH issue:\n\n"
+        "Issue: <short restatement>\n"
+        "Impact: <short description of risk>\n"
+        "Explanation:\n"
+        "- <1–3 short bullets>\n"
+        "Recommended Fix:\n"
+        "- <1–5 concrete, code-oriented bullets>\n"
+    )
+
+    return prompt
+
+
 async def async_explain_target_with_llm(
     target: str,
     project: str = "default",
