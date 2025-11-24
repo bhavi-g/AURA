@@ -275,17 +275,23 @@ def explain_cmd(
         "-f",
         help="Output format: 'text' (default) or 'json'.",
     ),
+    use_llm: bool = typer.Option(
+        False,
+        "--llm",
+        help="Use the LLM to generate a natural-language explanation of the top findings.",
+    ),
 ) -> None:
     """
-    Run analysis and print a simple explanation of the most important findings.
+    Run analysis and explain the most important findings.
 
-    - format='text' -> human-readable summary (current behaviour)
-    - format='json' -> machine-readable JSON payload
+    - Default: human-readable summary (static, no LLM).
+    - --format json: machine-readable findings payload.
+    - --llm: call the LLM to generate a natural-language explanation.
     """
     res = run_analysis(target, project_name=project)
     findings = res.get("findings", [])
 
-    # JSON mode: return a structured payload
+    # If JSON requested, ignore LLM for now (LLM is text-only output).
     if output_format.lower() == "json":
         payload = {
             "target": target,
@@ -297,7 +303,15 @@ def explain_cmd(
         typer.echo(json.dumps(payload, indent=2))
         return
 
-    # Text mode: keep existing behaviour using summarize_findings
+    # LLM path: build prompt from findings and ask the LLM (synchronously).
+    if use_llm:
+        prompt = build_llm_explanation_prompt(findings, max_items=max_items)
+        llm = LLM()
+        explanation = llm.complete(prompt)
+        typer.echo(explanation)
+        return
+
+    # Default text-only summary (existing behaviour used by tests).
     summary = summarize_findings(findings, max_items=max_items)
     typer.echo(summary)
 
