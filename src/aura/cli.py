@@ -9,7 +9,11 @@ from typing import Annotated
 import typer
 
 from aura.core.evaluation import evaluate
-from aura.core.explain import build_llm_explanation_prompt, summarize_findings
+from aura.core.explain import (
+    build_llm_explanation_prompt,
+    build_llm_remediation_prompt,
+    summarize_findings,
+)
 from aura.core.llm import LLM
 from aura.core.pipeline import run_analysis
 
@@ -280,6 +284,11 @@ def explain_cmd(
         "--llm",
         help="Use the LLM to generate a natural-language explanation of the top findings.",
     ),
+    include_fixes: bool = typer.Option(
+        False,
+        "--fixes",
+        help="Include concrete remediation suggestions for each issue (only used with --llm).",
+    ),
 ) -> None:
     """
     Run analysis and explain the most important findings.
@@ -287,6 +296,7 @@ def explain_cmd(
     - Default: human-readable summary (static, no LLM).
     - --format json: machine-readable findings payload.
     - --llm: call the LLM to generate a natural-language explanation.
+    - --llm --fixes: explanation + concrete remediation suggestions.
     """
     res = run_analysis(target, project_name=project)
     findings = res.get("findings", [])
@@ -303,9 +313,13 @@ def explain_cmd(
         typer.echo(json.dumps(payload, indent=2))
         return
 
-    # LLM path: build prompt from findings and ask the LLM (synchronously).
+    # LLM path: build appropriate prompt from findings and ask the LLM.
     if use_llm:
-        prompt = build_llm_explanation_prompt(findings, max_items=max_items)
+        if include_fixes:
+            prompt = build_llm_remediation_prompt(findings, max_items=max_items)
+        else:
+            prompt = build_llm_explanation_prompt(findings, max_items=max_items)
+
         llm = LLM()
         explanation = llm.complete(prompt)
         typer.echo(explanation)
