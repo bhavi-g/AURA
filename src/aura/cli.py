@@ -390,3 +390,113 @@ def llm_cmd(
 # ---------------------------------------------------------
 if __name__ == "__main__":
     app()
+
+
+# ---------------------------------------------------------
+# WEEK 10: PR-ready auto-fix command
+# ---------------------------------------------------------
+
+
+@app.command("fix")
+def fix_cmd(
+    target: str,
+    rule: str = typer.Option(
+        "",
+        "--rule",
+        help="Rule ID to fix (run once without --rule to list available rules).",
+    ),
+    project: str = typer.Option(
+        "default",
+        "--project",
+        "-p",
+        help="Project name used for persistence",
+    ),
+    max_items: int = typer.Option(
+        10,
+        "--max-items",
+        "-n",
+        min=1,
+        help="How many findings to scan when listing rules.",
+    ),
+) -> None:
+    """
+    Generate a PR-ready remediation diff for ONE specific finding rule.
+
+    Usage:
+    - List rules:
+        aura fix <target>
+    - Fix one rule:
+        aura fix <target> --rule <rule_id>
+    """
+    res = run_analysis(target, project_name=project)
+    findings = res.get("findings", [])
+
+    if not findings:
+        typer.echo("No issues detected. Nothing to fix.")
+        return
+
+    # If rule not provided, list available rules
+    if not rule:
+        seen = set()
+        rules = []
+        for f in findings:
+            rid = str(f.get("rule_id") or f.get("category") or "").strip()
+            if rid and rid not in seen:
+                seen.add(rid)
+                rules.append(rid)
+            if len(rules) >= max_items:
+                break
+
+        typer.echo("Available rules for this target:")
+        for r in rules:
+            typer.echo(f"- {r}")
+        typer.echo("\nRe-run with: aura fix <target> --rule <rule_id>")
+        return
+
+    # Select highest-priority finding for this rule
+    match = None
+    for f in findings:
+        if str(f.get("rule_id") or "").strip() == rule:
+            match = f
+            break
+
+    if match is None:
+        typer.echo(f"No finding found for rule='{rule}'.")
+        return
+
+    # Read full source for accurate patching
+    src_text = ""
+    p = Path(target)
+    if p.exists() and p.is_file():
+        src_text = p.read_text(encoding="utf-8", errors="ignore")
+
+    base_prompt = build_llm_remediation_prompt([match], max_items=1)
+
+    fix_prompt = (
+        "You are generating a git patch for a pull request.\n"
+        "Return ONLY a unified diff that can be applied with `git apply`.\n\n"
+        "STRICT RULES:\n"
+        "RULE-SPECIFIC CONSTRAINTS:"
+        "- If RULE is 'reentrancy-eth': you MUST apply checks-effects-interactions."
+        "Update balances or state BEFORE any external call."
+        "Do NOT add comments instead of code."
+        "- If RULE is 'tx-origin': replace tx.origin with msg.sender for authorization."
+        "- If RULE is 'arbitrary-send-eth': restrict ETH transfer to owner (or authorized address),"
+        "NOT msg.sender."
+        "- Output ONLY the unified diff.\n"
+        "- No explanations, no markdown, no backticks.\n"
+        "- Output must start with '---' and '+++'.\n"
+        "- Prefer minimal edits.\n"
+        "- If no safe fix is possible, output a single line starting with '# '.\n\n"
+        f"TARGET FILE: {target}\n"
+        f"RULE TO FIX: {rule}\n\n"
+        "FILE CONTENTS:\n"
+        "-----BEGIN FILE-----\n"
+        f"{src_text}\n"
+        "-----END FILE-----\n\n"
+        "NOW PRODUCE THE PATCH.\n\n" + base_prompt
+    )
+
+    llm = LLM()
+    out = llm.complete(fix_prompt).strip()
+    typer.echo(out)
