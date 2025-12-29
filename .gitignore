@@ -34,3 +34,5 @@ reports/*/
 !reports/golden/
 reports/summary.md
 reports/summary.json
+reports/
+requirements.txt
