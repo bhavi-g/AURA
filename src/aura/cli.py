@@ -344,22 +344,30 @@ def explain_llm_cmd(
         "--max-items",
         "-n",
         min=1,
-        help="How many top issues to include in the LLM explanation",
+        help="How many top issues to include in the LLM output",
+    ),
+    fixes: bool = typer.Option(
+        False,
+        "--fixes",
+        help="Include concrete remediation steps and a diff-style patch for each top issue",
     ),
 ) -> None:
     """
     Run analysis and ask the LLM to produce a natural-language explanation
     of the most important findings.
 
-    Uses a stubbed LLM if no real API key is configured.
+    Use --fixes to request remediation steps + a patch-style diff.
     """
     res = run_analysis(target, project_name=project)
     findings = res.get("findings", [])
 
-    prompt = build_llm_explanation_prompt(findings, max_items=max_items)
+    if fixes:
+        prompt = build_llm_remediation_prompt(findings, max_items=max_items)
+    else:
+        prompt = build_llm_explanation_prompt(findings, max_items=max_items)
+
     llm = LLM()
     explanation = llm.complete(prompt)
-
     typer.echo(explanation)
 
 
