@@ -1,151 +1,161 @@
+AURA
 
-# AURA – Hardening Pack (v2)
-**Generated:** 2025-10-13T11:46:47.630339Z
+**AURA (Automated Understanding & Remediation for Audits)** is a smart contract security tool that helps developers move from **vulnerability detection → explanation → fix**.
 
-This pack implements your code-quality, testing, performance, architecture, security, CI/CD, docs & polish steps.
+Most tools stop at reporting issues.
+AURA goes one step further by generating **review-ready code diffs** developers can use during development and code review.
 
-## How to integrate
-1. Merge these files into your existing repo (or unzip alongside the v1 Starter Kit).
-2. Run `pre-commit install` and `pip install -r requirements.txt`.
-3. Copy `.env.example` to `.env` and set secrets.
-4. `docker-compose up --build api` to run the API at http://localhost:8000.
+---
 
-## Highlights
-- `pyproject.toml` (black, isort, ruff)
-- `.pre-commit-config.yaml`
-- `tests/` with FastAPI tests
-- `docker-compose.yml` + `.env.example`
-- Logging for API
-- CI workflow for lint/type/test
-- Templates: CONTRIBUTING, CHANGELOG, SECURITY, CODEOWNERS
-- Mermaid architecture diagram in README
+## What AURA does (in one minute)
+
+**You give AURA**
+
+* A Solidity smart contract (file or folder)
+
+**AURA gives you**
+
+* Detected security issues (rule-based)
+* Plain-English explanations of why they matter
+* **PR-ready remediation diffs** for specific vulnerabilities
+
+AURA is designed to *assist developers*, not replace audits or expert review.
 
 
-CI ping: Mon 13 Oct 2025 23:55:39 EDT
+---
 
-✅ FINAL README.md SECTION (Copy-Paste Exactly)
-## Quickstart
+## Installation
 
-Run analyzers and generate reports:
+AURA currently runs as a **CLI tool**.
+
+### Prerequisites
+
+* Python 3.10+
+* Poetry
+* `solc` available in PATH
+* Slither installed
+
+### Install dependencies
 
 ```bash
-python -m aura analyze samples/contracts -p week3-smoke
-python tools/post_analyze.py
+poetry install
+```
 
-Explain Mode (LLM-Ready Audit Summaries)
+---
 
-AURA can summarize and prioritize the most important issues in a contract.
+## Basic Usage
 
-Run an explanation
-aura explain contracts/Reentrancy.sol
+### 1️⃣ Analyze a contract
 
+Detect vulnerabilities and get a summary score.
+
+```bash
+poetry run aura analyze contracts/Reentrancy.sol
+```
 
 Example output:
 
-Found 3 issue(s). Here are the top 3:
-1. [HIGH] reentrancy-eth (score=5.1): reentrancy-eth
-2. [LOW] low-level-calls (score=1.0): low-level-calls
-3. [LOW] solc-version (score=1.0): solc-version
-
-Show more issues
-aura explain contracts/Reentrancy.sol --max-items 5
-
-JSON output (machine-readable)
-aura explain contracts/Reentrancy.sol --format json
-
-
-Example JSON:
-
-{
-  "target": "contracts/Reentrancy.sol",
-  "project": "default",
-  "total_issues": 3,
-  "max_items": 3,
-  "findings": [
-    {
-      "tool": "slither",
-      "rule_id": "reentrancy-eth",
-      "title": "reentrancy-eth",
-      "severity": "HIGH",
-      "score": 5.1,
-      "description": "...",
-      "locations": [
-        {
-          "file": "contracts/Reentrancy.sol",
-          "line": 11,
-          "function": "withdraw"
-        }
-      ]
-    }
-  ]
-}
-
-
-This JSON output is intended for downstream tools or LLM-powered explanation modules.
-
+```
+Findings: 3 | Score: 8.3
+```
 
 ---
 
-# After pasting this:
+### 2️⃣ Explain findings (human-readable)
 
-Run:
+Summarize and prioritize the most important issues.
 
 ```bash
-pre-commit run --all-files
-git add README.md
-git commit -m "docs: add explain CLI examples and JSON output"
-git push
+poetry run aura explain contracts/Reentrancy.sol
+```
 
+Example:
+
+```
+Found 3 issue(s). Here are the top 3:
+1. [HIGH] reentrancy-eth
+2. [LOW] low-level-calls
+3. [LOW] solc-version
+```
 
 ---
 
-## 🔍 Demo: Detect → Explain → Fix
+### 3️⃣ Explain + suggest fixes (LLM-assisted)
 
-AURA combines static analysis with LLM-powered explanations and remediation.
-Below are three real vulnerability demos showing the full workflow.
-
----
-
-### 🧨 Demo 1: Reentrancy
+Generate explanations **plus remediation guidance**.
 
 ```bash
 poetry run aura explain-llm contracts/Reentrancy.sol --fixes
-What happens
+```
 
-Detects a high-severity reentrancy vulnerability
+What this does:
 
-Explains how funds can be drained via recursive calls
+* Explains exploit impact
+* Describes why the issue is dangerous
+* Suggests a concrete fix pattern
+* Outputs a patch-style diff
 
-Suggests a checks-effects-interactions patch with a diff
+---
 
-🔐 Demo 2: Access Control (Missing Authorization)
-poetry run aura explain-llm contracts/AccessControl.sol --fixes
+### 4️⃣ Generate a PR-ready diff for one issue
 
+Produce **diff-only output** suitable for direct review.
 
-What happens
+```bash
+poetry run aura fix contracts/RealWorldModern.sol --rule reentrancy-eth
+```
 
-Identifies unrestricted withdrawal of contract funds
+Example output:
 
-Explains why missing access control is dangerous
+```diff
+--- contracts/RealWorldModern.sol
++++ contracts/RealWorldModern.sol
+@@ -15,8 +15,8 @@
+ balances[msg.sender] -= amount;
+ (bool ok, ) = payable(msg.sender).call{value: amount}("");
+ require(ok, "ETH transfer failed");
+```
 
-Patches the function with an owner-only check
+---
 
-🎭 Demo 3: tx.origin Authentication Bug
-poetry run aura explain-llm contracts/TxOrigin.sol --fixes
+## Example Workflow (recommended)
 
+```bash
+# Detect issues
+poetry run aura analyze contracts/MyContract.sol
 
-What happens
+# Understand the most important ones
+poetry run aura explain contracts/MyContract.sol
 
-Detects unsafe use of tx.origin for authorization
+# Generate a fix for a specific rule
+poetry run aura fix contracts/MyContract.sol --rule reentrancy-eth
+```
 
-Explains phishing risks via intermediary contracts
+---
 
-Replaces tx.origin with msg.sender in a patch-style fix
+## Limitations (important)
 
-✨ Summary
+* AURA **does not replace** professional audits or formal verification
+* Generated diffs are **best-effort suggestions**
+* All fixes should be **reviewed by a developer**
+* Results depend on underlying static analyzers
 
-AURA does more than flag issues — it explains why they matter and shows developers how to fix them.
-This enables faster, safer smart contract development.
+AURA is meant to **reduce friction**, not eliminate responsibility.
 
+---
+
+## Project Status
+
+* Early-stage developer tool
+* CLI-only (UI planned later)
+* Actively evolving
+
+Feedback, issues, and contributions are welcome.
+
+---
+
+## License
+
+MIT
 
 
