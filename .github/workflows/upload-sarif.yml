@@ -23,10 +23,9 @@ jobs:
 
       - name: Install solc via solc-select
         run: |
-          sudo apt-get update -y
-          curl -L https://raw.githubusercontent.com/crytic/solc-select/master/install.sh | sudo bash
-          solc-select install 0.8.30
-          solc-select use 0.8.30
+          python -m pip install solc-select
+          solc-select install 0.8.20
+          solc-select use 0.8.20
           solc --version
 
       - name: Install package (editable) + dev deps
