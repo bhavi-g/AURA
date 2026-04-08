@@ -1,9 +1,14 @@
 import type { AnalyzeResponse, AuditJob, AuditReport, ExplainResponse, ExplainLLMResponse } from './types';
 
-const BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
+
+function buildUrl(path: string): string {
+    const normalizedBase = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+    return `${normalizedBase}${path}`;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await fetch(buildUrl(path), {
         headers: { 'Content-Type': 'application/json' },
         ...options,
     });
