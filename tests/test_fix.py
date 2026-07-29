@@ -1,4 +1,5 @@
 import shutil
+import subprocess as sp
 
 import pytest
 
@@ -55,3 +56,38 @@ def test_compile_with_solc_real_valid_file(tmp_path):
     ok, err = fix._compile_with_solc(f)
     assert ok is True
     assert err == ""
+
+
+def _git_init(workdir):
+    sp.run(["git", "init", "-q"], cwd=workdir, check=True)
+
+
+def test_run_git_apply_success(tmp_path):
+    _git_init(tmp_path)
+    target = tmp_path / "Foo.sol"
+    target.write_text("contract Foo {\n    uint x;\n}\n")
+
+    diff_text = (
+        "--- a/Foo.sol\n"
+        "+++ b/Foo.sol\n"
+        "@@ -1,3 +1,3 @@\n"
+        " contract Foo {\n"
+        "-    uint x;\n"
+        "+    uint y;\n"
+        " }\n"
+    )
+
+    ok, err = fix._run_git_apply(tmp_path, diff_text)
+    assert ok is True
+    assert err == ""
+    assert "uint y;" in target.read_text()
+
+
+def test_run_git_apply_failure_on_malformed_diff(tmp_path):
+    _git_init(tmp_path)
+    target = tmp_path / "Foo.sol"
+    target.write_text("contract Foo {}\n")
+
+    ok, err = fix._run_git_apply(tmp_path, "this is not a diff\n")
+    assert ok is False
+    assert err != ""
