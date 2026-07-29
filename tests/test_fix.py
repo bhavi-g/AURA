@@ -142,3 +142,29 @@ def test_generate_fix_diff_includes_error_context_when_retrying():
     )
 
     assert "patch failed to apply: corrupt patch" in llm.prompts[0]
+
+
+def test_generate_fix_diff_prompt_separates_rule_constraints():
+    """Verify that rule-specific constraints are properly separated (not garbled run-on)."""
+    finding = {
+        "rule_id": "reentrancy-eth",
+        "title": "reentrancy-eth",
+        "description": "Reentrancy in withdraw()",
+        "severity": "HIGH",
+        "locations": [{"file": "contracts/X.sol", "line": 5, "function": "withdraw"}],
+    }
+    llm = FakeLLM(["--- a/x\n+++ b/x\n"])
+
+    fix.generate_fix_diff(finding, "contract X {}", "reentrancy-eth", "contracts/X.sol", llm=llm)
+
+    prompt = llm.prompts[0]
+    # Verify that rule constraints are separated with newlines, not garbled together
+    assert "interactions.\n" in prompt, "reentrancy constraint should end with newline"
+    assert "Update balances or state BEFORE" in prompt
+    assert "Do NOT add comments instead of code.\n" in prompt
+    assert "- If RULE is 'tx-origin':" in prompt
+    assert "- If RULE is 'arbitrary-send-eth':" in prompt
+    # Verify no run-on garbling of key phrases
+    assert "interactions.Update" not in prompt, "constraints should be separated, not garbled"
+    assert "code.- If RULE" not in prompt, "constraints should be separated, not garbled"
+    assert "not msg.sender.\n" in prompt
