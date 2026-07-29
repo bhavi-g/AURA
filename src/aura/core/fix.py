@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from aura.core.analyzers.slither_adapter import SlitherAnalyzer
 from aura.core.explain import build_llm_remediation_prompt
 
 
@@ -107,3 +110,110 @@ def generate_fix_diff(
         "NOW PRODUCE THE PATCH.\n\n" + base_prompt
     )
     return llm.complete(fix_prompt).strip()
+
+
+def verify_fix(
+    target_path: str,
+    diff_text: str,
+    original_finding: dict,
+    original_findings: list[dict],
+    *,
+    solc_available: bool,
+    analyzer_available: bool,
+) -> VerifyResult:
+    workdir = Path(tempfile.mkdtemp(prefix="aura-fix-"))
+    try:
+        rel_path = Path(target_path)
+        if rel_path.is_absolute():
+            # `git apply` (invoked by _run_git_apply with its default -p1 strip
+            # level) resolves an absolute diff header by dropping just the
+            # leading "/" and treating the remainder as relative to its cwd
+            # (workdir). Mirror that here so the copy we create is exactly
+            # where git apply will look, regardless of whether target_path is
+            # absolute or repo-relative.
+            rel_path = rel_path.relative_to(rel_path.anchor)
+        dest = workdir / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+        original_source = Path(target_path).read_text(encoding="utf-8", errors="ignore")
+        dest.write_text(original_source, encoding="utf-8")
+
+        subprocess.run(["git", "init", "-q"], cwd=workdir, check=True)
+
+        applied, apply_err = _run_git_apply(workdir, diff_text)
+        if not applied:
+            return VerifyResult(
+                verdict="FAILED",
+                diff=diff_text,
+                attempts=0,
+                detail=f"patch did not apply: {apply_err}",
+            )
+
+        patched_source = dest.read_text(encoding="utf-8", errors="ignore")
+
+        if not solc_available:
+            return VerifyResult(
+                verdict="UNVERIFIED",
+                diff=diff_text,
+                attempts=0,
+                detail="patch applied; compile/re-analysis skipped (solc not found)",
+                degraded_reason="solc not found on PATH",
+                patched_source=patched_source,
+            )
+
+        compiled, compile_err = _compile_with_solc(dest)
+        if not compiled:
+            return VerifyResult(
+                verdict="FAILED",
+                diff=diff_text,
+                attempts=0,
+                detail=f"patched file does not compile: {compile_err}",
+            )
+
+        if not analyzer_available:
+            return VerifyResult(
+                verdict="UNVERIFIED",
+                diff=diff_text,
+                attempts=0,
+                detail="patch applied and compiles; re-analysis skipped (analyzer not found)",
+                degraded_reason="slither (analyzer) not found on PATH",
+                patched_source=patched_source,
+            )
+
+        patched_findings = SlitherAnalyzer().run(str(dest))
+
+        target_key = _finding_key(original_finding)
+        original_keys = {_finding_key(f) for f in original_findings}
+        patched_keys = [_finding_key(f) for f in patched_findings]
+
+        target_gone = target_key not in patched_keys
+        new_findings = [
+            f for f, k in zip(patched_findings, patched_keys, strict=True) if k not in original_keys
+        ]
+
+        if target_gone and not new_findings:
+            return VerifyResult(
+                verdict="VERIFIED",
+                diff=diff_text,
+                attempts=0,
+                detail="target finding resolved; no new findings introduced",
+                patched_source=patched_source,
+            )
+        if target_gone and new_findings:
+            return VerifyResult(
+                verdict="REGRESSED",
+                diff=diff_text,
+                attempts=0,
+                detail=f"target finding resolved but {len(new_findings)} new finding(s) introduced",
+                new_findings=new_findings,
+                patched_source=patched_source,
+            )
+        return VerifyResult(
+            verdict="FAILED",
+            diff=diff_text,
+            attempts=0,
+            detail="target finding is still present after applying the patch",
+            patched_source=patched_source,
+        )
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)

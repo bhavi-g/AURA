@@ -1,3 +1,4 @@
+import difflib
 import shutil
 import subprocess as sp
 
@@ -168,3 +169,185 @@ def test_generate_fix_diff_prompt_separates_rule_constraints():
     assert "interactions.Update" not in prompt, "constraints should be separated, not garbled"
     assert "code.- If RULE" not in prompt, "constraints should be separated, not garbled"
     assert "not msg.sender.\n" in prompt
+
+
+def _make_unified_diff(path: str, original: str, patched: str) -> str:
+    diff_lines = difflib.unified_diff(
+        original.splitlines(keepends=True),
+        patched.splitlines(keepends=True),
+        fromfile=path,
+        tofile=path,
+    )
+    return "".join(diff_lines)
+
+
+def _original_finding():
+    return {
+        "rule_id": "reentrancy-eth",
+        "locations": [{"file": "contracts/ReentrancyDemo.sol", "line": 11, "function": "withdraw"}],
+    }
+
+
+def _original_findings():
+    return [_original_finding()]
+
+
+def test_verify_fix_verified(monkeypatch, sample_contract, fake_slither_findings):
+    from aura.core.analyzers import slither_adapter
+
+    fixed_findings = [f for f in fake_slither_findings if f["rule_id"] != "reentrancy-eth"]
+    monkeypatch.setattr(slither_adapter.SlitherAnalyzer, "run", lambda self, target: fixed_findings)
+    monkeypatch.setattr(fix, "_compile_with_solc", lambda path: (True, ""))
+
+    original = sample_contract.read_text()
+    patched = original.replace(
+        'require(ok, "send failed");', 'require(ok, "send failed"); // patched'
+    )
+    diff_text = _make_unified_diff(str(sample_contract), original, patched)
+
+    result = fix.verify_fix(
+        str(sample_contract),
+        diff_text,
+        _original_finding(),
+        fake_slither_findings,
+        solc_available=True,
+        analyzer_available=True,
+    )
+
+    assert result.verdict == "VERIFIED"
+    assert result.patched_source is not None
+    assert "patched" in result.patched_source
+
+
+def test_verify_fix_failed_on_bad_apply(sample_contract):
+    result = fix.verify_fix(
+        str(sample_contract),
+        "not a real diff\n",
+        _original_finding(),
+        _original_findings(),
+        solc_available=True,
+        analyzer_available=True,
+    )
+    assert result.verdict == "FAILED"
+    assert "did not apply" in result.detail
+
+
+def test_verify_fix_failed_on_compile_error(monkeypatch, sample_contract):
+    monkeypatch.setattr(fix, "_compile_with_solc", lambda path: (False, "ParserError: bad"))
+
+    original = sample_contract.read_text()
+    patched = original.replace(
+        'require(ok, "send failed");', 'require(ok, "send failed"); // patched'
+    )
+    diff_text = _make_unified_diff(str(sample_contract), original, patched)
+
+    result = fix.verify_fix(
+        str(sample_contract),
+        diff_text,
+        _original_finding(),
+        _original_findings(),
+        solc_available=True,
+        analyzer_available=True,
+    )
+    assert result.verdict == "FAILED"
+    assert "does not compile" in result.detail
+
+
+def test_verify_fix_failed_when_finding_still_present(
+    monkeypatch, sample_contract, fake_slither_findings
+):
+    from aura.core.analyzers import slither_adapter
+
+    monkeypatch.setattr(
+        slither_adapter.SlitherAnalyzer, "run", lambda self, target: fake_slither_findings
+    )
+    monkeypatch.setattr(fix, "_compile_with_solc", lambda path: (True, ""))
+
+    original = sample_contract.read_text()
+    patched = original.replace(
+        'require(ok, "send failed");', 'require(ok, "send failed"); // patched'
+    )
+    diff_text = _make_unified_diff(str(sample_contract), original, patched)
+
+    result = fix.verify_fix(
+        str(sample_contract),
+        diff_text,
+        _original_finding(),
+        _original_findings(),
+        solc_available=True,
+        analyzer_available=True,
+    )
+    assert result.verdict == "FAILED"
+    assert "still present" in result.detail
+
+
+def test_verify_fix_regressed_on_new_finding(monkeypatch, sample_contract, fake_slither_findings):
+    from aura.core.analyzers import slither_adapter
+
+    fixed_plus_new = [f for f in fake_slither_findings if f["rule_id"] != "reentrancy-eth"] + [
+        {
+            "rule_id": "unchecked-transfer",
+            "locations": [
+                {"file": "contracts/ReentrancyDemo.sol", "line": 20, "function": "withdraw"}
+            ],
+        }
+    ]
+    monkeypatch.setattr(slither_adapter.SlitherAnalyzer, "run", lambda self, target: fixed_plus_new)
+    monkeypatch.setattr(fix, "_compile_with_solc", lambda path: (True, ""))
+
+    original = sample_contract.read_text()
+    patched = original.replace(
+        'require(ok, "send failed");', 'require(ok, "send failed"); // patched'
+    )
+    diff_text = _make_unified_diff(str(sample_contract), original, patched)
+
+    result = fix.verify_fix(
+        str(sample_contract),
+        diff_text,
+        _original_finding(),
+        fake_slither_findings,
+        solc_available=True,
+        analyzer_available=True,
+    )
+    assert result.verdict == "REGRESSED"
+    assert len(result.new_findings) == 1
+
+
+def test_verify_fix_unverified_when_solc_missing(sample_contract):
+    original = sample_contract.read_text()
+    patched = original.replace(
+        'require(ok, "send failed");', 'require(ok, "send failed"); // patched'
+    )
+    diff_text = _make_unified_diff(str(sample_contract), original, patched)
+
+    result = fix.verify_fix(
+        str(sample_contract),
+        diff_text,
+        _original_finding(),
+        _original_findings(),
+        solc_available=False,
+        analyzer_available=True,
+    )
+    assert result.verdict == "UNVERIFIED"
+    assert "solc" in result.degraded_reason
+
+
+def test_verify_fix_unverified_when_analyzer_missing(monkeypatch, sample_contract):
+    monkeypatch.setattr(fix, "_compile_with_solc", lambda path: (True, ""))
+
+    original = sample_contract.read_text()
+    patched = original.replace(
+        'require(ok, "send failed");', 'require(ok, "send failed"); // patched'
+    )
+    diff_text = _make_unified_diff(str(sample_contract), original, patched)
+
+    result = fix.verify_fix(
+        str(sample_contract),
+        diff_text,
+        _original_finding(),
+        _original_findings(),
+        solc_available=True,
+        analyzer_available=False,
+    )
+    assert result.verdict == "UNVERIFIED"
+    assert "analyzer" in result.degraded_reason or "slither" in result.degraded_reason
