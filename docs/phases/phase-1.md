@@ -1,6 +1,6 @@
 # Phase 1 — Verified fixes (closed loop)
 
-**Status:** planned (next up)
+**Status:** done (2026-07-25)
 **ADR:** [0004-verified-fix-loop](../adr/0004-verified-fix-loop.md)
 
 ## Why
