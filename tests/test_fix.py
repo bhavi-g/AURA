@@ -351,3 +351,88 @@ def test_verify_fix_unverified_when_analyzer_missing(monkeypatch, sample_contrac
     )
     assert result.verdict == "UNVERIFIED"
     assert "analyzer" in result.degraded_reason or "slither" in result.degraded_reason
+
+
+def test_solc_available_reflects_which(monkeypatch):
+    monkeypatch.setattr(
+        fix.shutil, "which", lambda name: "/usr/bin/solc" if name == "solc" else None
+    )
+    assert fix._solc_available() is True
+
+    monkeypatch.setattr(fix.shutil, "which", lambda name: None)
+    assert fix._solc_available() is False
+
+
+def test_analyzer_available_reflects_which(monkeypatch):
+    monkeypatch.setattr(
+        fix.shutil, "which", lambda name: "/usr/bin/slither" if name == "slither" else None
+    )
+    assert fix._analyzer_available() is True
+
+    monkeypatch.setattr(fix.shutil, "which", lambda name: None)
+    assert fix._analyzer_available() is False
+
+
+def test_verify_fix_loop_retries_and_succeeds(monkeypatch, sample_contract, fake_slither_findings):
+    from aura.core.analyzers import slither_adapter
+
+    fixed_findings = [f for f in fake_slither_findings if f["rule_id"] != "reentrancy-eth"]
+    monkeypatch.setattr(slither_adapter.SlitherAnalyzer, "run", lambda self, target: fixed_findings)
+    monkeypatch.setattr(fix, "_compile_with_solc", lambda path: (True, ""))
+
+    original = sample_contract.read_text()
+    patched = original.replace(
+        'require(ok, "send failed");', 'require(ok, "send failed"); // patched'
+    )
+    good_diff = _make_unified_diff(str(sample_contract), original, patched)
+
+    llm = FakeLLM(["not a diff at all", good_diff])
+
+    result = fix.verify_fix_loop(
+        str(sample_contract),
+        _original_finding(),
+        fake_slither_findings,
+        "reentrancy-eth",
+        llm=llm,
+        max_retries=3,
+    )
+
+    assert result.verdict == "VERIFIED"
+    assert result.attempts == 2
+    assert len(llm.prompts) == 2
+    assert "did not apply" in llm.prompts[1]
+
+
+def test_verify_fix_loop_exhausts_retries(sample_contract):
+    llm = FakeLLM(["not a diff", "still not a diff", "nope"])
+
+    result = fix.verify_fix_loop(
+        str(sample_contract),
+        _original_finding(),
+        _original_findings(),
+        "reentrancy-eth",
+        llm=llm,
+        max_retries=3,
+    )
+
+    assert result.verdict == "FAILED"
+    assert result.attempts == 3
+    assert len(llm.prompts) == 3
+
+
+def test_verify_fix_loop_stops_immediately_when_llm_declines(sample_contract):
+    llm = FakeLLM(["# no safe fix is possible for this pattern"])
+
+    result = fix.verify_fix_loop(
+        str(sample_contract),
+        _original_finding(),
+        _original_findings(),
+        "reentrancy-eth",
+        llm=llm,
+        max_retries=3,
+    )
+
+    assert result.verdict == "FAILED"
+    assert result.attempts == 1
+    assert len(llm.prompts) == 1
+    assert "no safe fix" in result.detail

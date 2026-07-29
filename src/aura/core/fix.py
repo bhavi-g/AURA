@@ -109,7 +109,17 @@ def generate_fix_diff(
         "-----END FILE-----\n\n"
         "NOW PRODUCE THE PATCH.\n\n" + base_prompt
     )
-    return llm.complete(fix_prompt).strip()
+    diff_text = llm.complete(fix_prompt).strip()
+    if diff_text and not diff_text.endswith("\n"):
+        # `git apply` is sensitive to the trailing newline of the last diff
+        # line matching the underlying file's line-ending state. Stripping
+        # outer whitespace above removes a well-formed diff's final "\n"
+        # whenever the patched file ends with a trailing newline (the
+        # common case), which makes git apply reject it as a corrupt patch.
+        # Restore a single trailing newline so a well-formed diff still
+        # applies cleanly.
+        diff_text += "\n"
+    return diff_text
 
 
 def verify_fix(
@@ -217,3 +227,63 @@ def verify_fix(
         )
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _solc_available() -> bool:
+    return shutil.which("solc") is not None
+
+
+def _analyzer_available() -> bool:
+    return shutil.which("slither") is not None
+
+
+def verify_fix_loop(
+    target_path: str,
+    original_finding: dict,
+    original_findings: list[dict],
+    rule: str,
+    *,
+    llm,
+    max_retries: int = 3,
+) -> VerifyResult:
+    solc_available = _solc_available()
+    analyzer_available = _analyzer_available()
+    source_text = Path(target_path).read_text(encoding="utf-8", errors="ignore")
+
+    error_context: str | None = None
+    result: VerifyResult | None = None
+
+    for attempt in range(1, max_retries + 1):
+        diff_text = generate_fix_diff(
+            original_finding,
+            source_text,
+            rule,
+            target_path,
+            llm=llm,
+            error_context=error_context,
+        )
+
+        if diff_text.strip().startswith("#"):
+            return VerifyResult(
+                verdict="FAILED",
+                diff=diff_text,
+                attempts=attempt,
+                detail="LLM reported no safe fix is available",
+            )
+
+        result = verify_fix(
+            target_path,
+            diff_text,
+            original_finding,
+            original_findings,
+            solc_available=solc_available,
+            analyzer_available=analyzer_available,
+        )
+        result.attempts = attempt
+
+        if result.verdict in ("VERIFIED", "UNVERIFIED"):
+            return result
+
+        error_context = result.detail
+
+    return result
