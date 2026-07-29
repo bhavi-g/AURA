@@ -14,6 +14,7 @@ from aura.core.explain import (
     build_llm_remediation_prompt,
     summarize_findings,
 )
+from aura.core.fix import verify_fix_loop
 from aura.core.llm import LLM
 from aura.core.pipeline import run_analysis
 
@@ -418,15 +419,37 @@ def fix_cmd(
         min=1,
         help="How many findings to scan when listing rules.",
     ),
+    write: bool = typer.Option(
+        False,
+        "--write",
+        help="Apply the fix to the target file. Only writes when the verdict is VERIFIED.",
+    ),
+    max_retries: int = typer.Option(
+        3,
+        "--max-retries",
+        min=1,
+        help="Maximum verification attempts before giving up.",
+    ),
+    json_out: bool = typer.Option(
+        False,
+        "--json",
+        help="Output the verification result as JSON instead of text.",
+    ),
 ) -> None:
     """
-    Generate a PR-ready remediation diff for ONE specific finding rule.
+    Generate and verify a PR-ready remediation diff for ONE specific finding rule.
+
+    The diff is applied in an isolated workspace, compiled, and re-analyzed
+    before being presented — a VERIFIED verdict means the target finding is
+    confirmed gone with no new findings introduced.
 
     Usage:
     - List rules:
         aura fix <target>
-    - Fix one rule:
+    - Fix + verify one rule:
         aura fix <target> --rule <rule_id>
+    - Fix, verify, and apply to the file:
+        aura fix <target> --rule <rule_id> --write
     """
     res = run_analysis(target, project_name=project)
     findings = res.get("findings", [])
@@ -435,7 +458,6 @@ def fix_cmd(
         typer.echo("No issues detected. Nothing to fix.")
         return
 
-    # If rule not provided, list available rules
     if not rule:
         seen = set()
         rules = []
@@ -453,7 +475,6 @@ def fix_cmd(
         typer.echo("\nRe-run with: aura fix <target> --rule <rule_id>")
         return
 
-    # Select highest-priority finding for this rule
     match = None
     for f in findings:
         if str(f.get("rule_id") or "").strip() == rule:
@@ -464,39 +485,27 @@ def fix_cmd(
         typer.echo(f"No finding found for rule='{rule}'.")
         return
 
-    # Read full source for accurate patching
-    src_text = ""
-    p = Path(target)
-    if p.exists() and p.is_file():
-        src_text = p.read_text(encoding="utf-8", errors="ignore")
-
-    base_prompt = build_llm_remediation_prompt([match], max_items=1)
-
-    fix_prompt = (
-        "You are generating a git patch for a pull request.\n"
-        "Return ONLY a unified diff that can be applied with `git apply`.\n\n"
-        "STRICT RULES:\n"
-        "RULE-SPECIFIC CONSTRAINTS:"
-        "- If RULE is 'reentrancy-eth': you MUST apply checks-effects-interactions."
-        "Update balances or state BEFORE any external call."
-        "Do NOT add comments instead of code."
-        "- If RULE is 'tx-origin': replace tx.origin with msg.sender for authorization."
-        "- If RULE is 'arbitrary-send-eth': restrict ETH transfer to owner (or authorized address),"
-        "NOT msg.sender."
-        "- Output ONLY the unified diff.\n"
-        "- No explanations, no markdown, no backticks.\n"
-        "- Output must start with '---' and '+++'.\n"
-        "- Prefer minimal edits.\n"
-        "- If no safe fix is possible, output a single line starting with '# '.\n\n"
-        f"TARGET FILE: {target}\n"
-        f"RULE TO FIX: {rule}\n\n"
-        "FILE CONTENTS:\n"
-        "-----BEGIN FILE-----\n"
-        f"{src_text}\n"
-        "-----END FILE-----\n\n"
-        "NOW PRODUCE THE PATCH.\n\n" + base_prompt
-    )
-
     llm = LLM()
-    out = llm.complete(fix_prompt).strip()
-    typer.echo(out)
+    result = verify_fix_loop(target, match, findings, rule, llm=llm, max_retries=max_retries)
+
+    if json_out:
+        payload = {
+            "verdict": result.verdict,
+            "attempts": result.attempts,
+            "detail": result.detail,
+            "degraded_reason": result.degraded_reason,
+            "diff": result.diff,
+        }
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        typer.echo(f"Verdict: {result.verdict} (attempt {result.attempts}/{max_retries})")
+        typer.echo(result.detail)
+        typer.echo("")
+        typer.echo(result.diff)
+
+    if write:
+        if result.verdict == "VERIFIED" and result.patched_source is not None:
+            Path(target).write_text(result.patched_source, encoding="utf-8")
+            typer.echo(f"\nWrote verified fix to {target}")
+        else:
+            typer.echo(f"\nRefusing to write: verdict is {result.verdict}, not VERIFIED.")
