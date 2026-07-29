@@ -91,3 +91,54 @@ def test_run_git_apply_failure_on_malformed_diff(tmp_path):
     ok, err = fix._run_git_apply(tmp_path, "this is not a diff\n")
     assert ok is False
     assert err != ""
+
+
+class FakeLLM:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.prompts = []
+
+    def complete(self, prompt):
+        self.prompts.append(prompt)
+        return self.responses.pop(0)
+
+
+def test_generate_fix_diff_includes_rule_and_target():
+    finding = {
+        "rule_id": "reentrancy-eth",
+        "title": "reentrancy-eth",
+        "description": "Reentrancy in withdraw()",
+        "severity": "HIGH",
+        "locations": [{"file": "contracts/X.sol", "line": 5, "function": "withdraw"}],
+    }
+    llm = FakeLLM(["--- a/x\n+++ b/x\n"])
+
+    out = fix.generate_fix_diff(
+        finding, "contract X {}", "reentrancy-eth", "contracts/X.sol", llm=llm
+    )
+
+    assert out.startswith("---")
+    assert "RULE TO FIX: reentrancy-eth" in llm.prompts[0]
+    assert "TARGET FILE: contracts/X.sol" in llm.prompts[0]
+
+
+def test_generate_fix_diff_includes_error_context_when_retrying():
+    finding = {
+        "rule_id": "reentrancy-eth",
+        "title": "reentrancy-eth",
+        "description": "Reentrancy in withdraw()",
+        "severity": "HIGH",
+        "locations": [{"file": "contracts/X.sol", "line": 5, "function": "withdraw"}],
+    }
+    llm = FakeLLM(["--- a/x\n+++ b/x\n"])
+
+    fix.generate_fix_diff(
+        finding,
+        "contract X {}",
+        "reentrancy-eth",
+        "contracts/X.sol",
+        llm=llm,
+        error_context="patch failed to apply: corrupt patch",
+    )
+
+    assert "patch failed to apply: corrupt patch" in llm.prompts[0]
