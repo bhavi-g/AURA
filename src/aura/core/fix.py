@@ -53,7 +53,7 @@ def _run_git_apply(workdir: Path, diff_text: str) -> tuple[bool, str]:
     patch_file.write_text(diff_text, encoding="utf-8")
     try:
         proc = subprocess.run(
-            ["git", "apply", "--unsafe-paths", str(patch_file)],
+            ["git", "apply", str(patch_file)],
             cwd=workdir,
             capture_output=True,
             text=True,
@@ -63,6 +63,33 @@ def _run_git_apply(workdir: Path, diff_text: str) -> tuple[bool, str]:
     if proc.returncode != 0:
         return False, proc.stderr.strip()
     return True, ""
+
+
+def _rewrite_diff_headers(diff_text: str, basename: str) -> str:
+    """
+    Force the diff's two file-header lines to reference `a/<basename>` and
+    `b/<basename>` regardless of whatever path the LLM's diff actually
+    claims. The diff is applied with `git apply`'s default -p1, which
+    strips the leading `a/`/`b/` component, so this guarantees the patch
+    can only ever touch `workdir/<basename>` — the one file we copied in
+    for verification — closing off path-traversal headers like
+    `--- a/../outside/victim.txt` at the source rather than relying on
+    `git apply --unsafe-paths` (which permits exactly that).
+    """
+    lines = diff_text.splitlines(keepends=True)
+    rewrote_old = False
+    rewrote_new = False
+    for i, line in enumerate(lines):
+        ending = "\n" if line.endswith("\n") else ""
+        if not rewrote_old and line.startswith("--- "):
+            lines[i] = f"--- a/{basename}{ending}"
+            rewrote_old = True
+        elif not rewrote_new and line.startswith("+++ "):
+            lines[i] = f"+++ b/{basename}{ending}"
+            rewrote_new = True
+        if rewrote_old and rewrote_new:
+            break
+    return "".join(lines)
 
 
 def generate_fix_diff(
@@ -98,6 +125,8 @@ def generate_fix_diff(
         "- Output ONLY the unified diff.\n"
         "- No explanations, no markdown, no backticks.\n"
         "- Output must start with '---' and '+++'.\n"
+        "- Diff headers should use 'a/<filename>' and 'b/<filename>' prefixes\n"
+        "(e.g. '--- a/Foo.sol' / '+++ b/Foo.sol').\n"
         "- Prefer minimal edits.\n"
         "- If no safe fix is possible, output a single line starting with '# '.\n\n"
         f"TARGET FILE: {target}\n"
@@ -126,31 +155,64 @@ def verify_fix(
     target_path: str,
     diff_text: str,
     original_finding: dict,
-    original_findings: list[dict],
     *,
     solc_available: bool,
     analyzer_available: bool,
 ) -> VerifyResult:
+    # The whole verdict hinges on being able to run the analyzer inside the
+    # verification workspace (both for the pristine control run below and
+    # for the post-patch run). Without it there is nothing meaningful to
+    # verify, so fail fast without ever touching the target file.
+    if not analyzer_available:
+        return VerifyResult(
+            verdict="UNVERIFIED",
+            diff=diff_text,
+            attempts=0,
+            detail="verification skipped; analyzer not found on PATH",
+            degraded_reason="slither (analyzer) not found on PATH",
+        )
+
     workdir = Path(tempfile.mkdtemp(prefix="aura-fix-"))
     try:
-        rel_path = Path(target_path)
-        if rel_path.is_absolute():
-            # `git apply` (invoked by _run_git_apply with its default -p1 strip
-            # level) resolves an absolute diff header by dropping just the
-            # leading "/" and treating the remainder as relative to its cwd
-            # (workdir). Mirror that here so the copy we create is exactly
-            # where git apply will look, regardless of whether target_path is
-            # absolute or repo-relative.
-            rel_path = rel_path.relative_to(rel_path.anchor)
-        dest = workdir / rel_path
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        # Single-file focus (see docs/PROJECT_BRIEF.md "v1 does NOT" —
+        # multi-file/cross-contract fixes are out of scope): copy the target
+        # to a flat `workdir/<basename>` location regardless of whether
+        # target_path is absolute or relative. Diff headers are rewritten to
+        # match this exact path below, so nothing about the LLM's diff
+        # content or the caller's original path shape affects where the
+        # patch actually lands.
+        basename = Path(target_path).name
+        dest = workdir / basename
 
         original_source = Path(target_path).read_text(encoding="utf-8", errors="ignore")
         dest.write_text(original_source, encoding="utf-8")
 
         subprocess.run(["git", "init", "-q"], cwd=workdir, check=True)
 
-        applied, apply_err = _run_git_apply(workdir, diff_text)
+        # Control run: confirm the pristine copy — in this same isolated
+        # workspace/environment — actually reproduces the finding we're
+        # trying to fix, before applying anything. If it doesn't, we can't
+        # tell "the analyzer silently failed" apart from "it's actually
+        # fixed", so we can't trust a downstream VERIFIED verdict. This also
+        # becomes the baseline for regression comparison below, measured in
+        # the exact same environment as the post-patch run (unlike the old
+        # design, which compared against a caller-supplied baseline computed
+        # in a different environment/layout).
+        target_key = _finding_key(original_finding)
+        control_findings = SlitherAnalyzer().run(str(dest))
+        control_keys = {_finding_key(f) for f in control_findings}
+
+        if target_key not in control_keys:
+            return VerifyResult(
+                verdict="UNVERIFIED",
+                diff=diff_text,
+                attempts=0,
+                detail="could not reproduce the target finding in the verification workspace",
+            )
+
+        canonical_diff = _rewrite_diff_headers(diff_text, basename)
+
+        applied, apply_err = _run_git_apply(workdir, canonical_diff)
         if not applied:
             return VerifyResult(
                 verdict="FAILED",
@@ -180,25 +242,12 @@ def verify_fix(
                 detail=f"patched file does not compile: {compile_err}",
             )
 
-        if not analyzer_available:
-            return VerifyResult(
-                verdict="UNVERIFIED",
-                diff=diff_text,
-                attempts=0,
-                detail="patch applied and compiles; re-analysis skipped (analyzer not found)",
-                degraded_reason="slither (analyzer) not found on PATH",
-                patched_source=patched_source,
-            )
-
         patched_findings = SlitherAnalyzer().run(str(dest))
-
-        target_key = _finding_key(original_finding)
-        original_keys = {_finding_key(f) for f in original_findings}
         patched_keys = [_finding_key(f) for f in patched_findings]
 
         target_gone = target_key not in patched_keys
         new_findings = [
-            f for f, k in zip(patched_findings, patched_keys, strict=True) if k not in original_keys
+            f for f, k in zip(patched_findings, patched_keys, strict=True) if k not in control_keys
         ]
 
         if target_gone and not new_findings:
@@ -240,7 +289,6 @@ def _analyzer_available() -> bool:
 def verify_fix_loop(
     target_path: str,
     original_finding: dict,
-    original_findings: list[dict],
     rule: str,
     *,
     llm,
@@ -275,7 +323,6 @@ def verify_fix_loop(
             target_path,
             diff_text,
             original_finding,
-            original_findings,
             solc_available=solc_available,
             analyzer_available=analyzer_available,
         )

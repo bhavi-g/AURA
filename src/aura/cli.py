@@ -486,7 +486,7 @@ def fix_cmd(
         return
 
     llm = LLM()
-    result = verify_fix_loop(target, match, findings, rule, llm=llm, max_retries=max_retries)
+    result = verify_fix_loop(target, match, rule, llm=llm, max_retries=max_retries)
 
     if json_out:
         payload = {
