@@ -594,6 +594,8 @@ def test_verify_fix_loop_retries_and_succeeds(monkeypatch, sample_contract, fake
     # Each verify_fix call does a control run then (if it gets that far) a
     # patched run: attempt 1's malformed diff never gets past control+apply
     # (1 analyzer call), attempt 2 does control then patched (2 more calls).
+    monkeypatch.setattr(fix, "_solc_available", lambda: True)
+    monkeypatch.setattr(fix, "_analyzer_available", lambda: True)
     _mock_analyzer_sequence(
         monkeypatch,
         slither_adapter,
@@ -626,6 +628,8 @@ def test_verify_fix_loop_retries_and_succeeds(monkeypatch, sample_contract, fake
 def test_verify_fix_loop_exhausts_retries(monkeypatch, sample_contract):
     from aura.core.analyzers import slither_adapter
 
+    monkeypatch.setattr(fix, "_solc_available", lambda: True)
+    monkeypatch.setattr(fix, "_analyzer_available", lambda: True)
     # Control run always succeeds (target present); every attempt's
     # malformed diff then fails at the apply step.
     monkeypatch.setattr(
