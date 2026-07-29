@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 
@@ -22,3 +24,20 @@ def _finding_key(finding: dict) -> tuple:
     if function is None:
         return (rule_id,)
     return (rule_id, function)
+
+
+def _compile_with_solc(file_path: Path) -> tuple[bool, str]:
+    try:
+        proc = subprocess.run(
+            ["solc", "--bin", str(file_path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return False, "solc not found on PATH"
+    except subprocess.TimeoutExpired:
+        return False, "solc compile timed out"
+    if proc.returncode != 0:
+        return False, proc.stderr.strip()
+    return True, ""
