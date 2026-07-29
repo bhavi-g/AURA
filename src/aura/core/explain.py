@@ -47,8 +47,7 @@ def summarize_findings(
         sev = str(f.get("severity", "UNKNOWN")).upper()
         score = f.get("score", 0)
         title = f.get("title", "") or ""
-        desc_lines = (f.get("description") or "").splitlines()
-        short_desc = desc_lines[0].strip() if desc_lines else ""
+        short_desc = (f.get("description") or "").splitlines()[0].strip()
         lines.append(f"{idx}. [{sev}] {rule} (score={score}): {title or short_desc}")
 
     return "\n".join(lines)

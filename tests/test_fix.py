@@ -184,6 +184,7 @@ def _make_unified_diff(path: str, original: str, patched: str) -> str:
 def _original_finding():
     return {
         "rule_id": "reentrancy-eth",
+        "description": "Reentrancy in withdraw()",
         "locations": [{"file": "contracts/ReentrancyDemo.sol", "line": 11, "function": "withdraw"}],
     }
 
