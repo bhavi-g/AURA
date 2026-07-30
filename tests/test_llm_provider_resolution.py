@@ -3,6 +3,8 @@ from aura.core.llm import LLM, LLMConfig, _AnthropicBackend, _OpenAIBackend, _St
 
 def test_no_keys_falls_back_to_stub(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("AURA_LLM_PROVIDER", raising=False)
 
     llm = LLM()
 
@@ -10,6 +12,8 @@ def test_no_keys_falls_back_to_stub(monkeypatch):
 
 
 def test_openai_key_present_selects_openai_backend(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("AURA_LLM_PROVIDER", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-resolution-test")
 
     llm = LLM()
