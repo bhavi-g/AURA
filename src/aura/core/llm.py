@@ -13,6 +13,11 @@ try:
 except ImportError:  # package not installed
     AsyncOpenAI = None  # type: ignore[assignment]
 
+try:
+    from anthropic import AsyncAnthropic  # type: ignore
+except ImportError:  # package not installed
+    AsyncAnthropic = None  # type: ignore[assignment]
+
 
 @dataclass
 class LLMConfig:
@@ -73,6 +78,56 @@ class _OpenAIBackend:
             messages=[{"role": "user", "content": prompt}],
         )
         return response.choices[0].message.content or ""
+
+
+class _AnthropicBackend:
+    """
+    Wraps AsyncAnthropic.
+
+    Two deliberate deviations from a naive port of the OpenAI backend, both
+    required for correctness on Claude Sonnet 5:
+
+    - Never forwards temperature/top_p/top_k: Sonnet 5 returns 400 on a
+      non-default sampling value, and LLMConfig's default temperature (0.2)
+      is non-default.
+    - Explicitly disables thinking: these are short, deterministic
+      completions (an explanation paragraph, a unified diff), not agentic
+      reasoning, and Sonnet 5 runs adaptive thinking by default when
+      `thinking` is omitted — sharing the same max_tokens budget as the
+      response text. Disabling it avoids a fix-diff generation silently
+      truncating to (near-)nothing.
+    """
+
+    DEFAULT_MODEL = "claude-sonnet-5"
+
+    SYSTEM_GUARD = (
+        "Respond with only the requested output. Do not include internal "
+        "reasoning, <thinking> tags, or other internal/system XML tags in "
+        "your response."
+    )
+
+    def __init__(self, client: AsyncAnthropic, config: LLMConfig) -> None:
+        self._client = client
+        self._config = config
+
+    async def acomplete(
+        self,
+        prompt: str,
+        *,
+        model: str | None,
+        temperature: float | None,
+        max_tokens: int | None,
+    ) -> str:
+        response = await self._client.messages.create(
+            model=model or self._config.model or self.DEFAULT_MODEL,
+            max_tokens=max_tokens or self._config.max_tokens,
+            system=self.SYSTEM_GUARD,
+            thinking={"type": "disabled"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return "".join(
+            block.text for block in response.content if getattr(block, "type", None) == "text"
+        )
 
 
 def _make_openai_backend(config: LLMConfig) -> _OpenAIBackend | None:
