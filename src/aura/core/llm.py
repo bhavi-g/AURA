@@ -25,9 +25,12 @@ class LLMConfig:
     Configuration for the LLM client.
 
     `model` defaults to None: each backend supplies its own provider-specific
-    default when no explicit model is requested.
+    default when no explicit model is requested. `provider` is an explicit
+    override (mainly for tests); when unset, resolution falls back to the
+    AURA_LLM_PROVIDER env var, then auto-detection.
     """
 
+    provider: str | None = None
     model: str | None = None
     temperature: float = 0.2
     max_tokens: int = 512
@@ -137,15 +140,21 @@ def _make_openai_backend(config: LLMConfig) -> _OpenAIBackend | None:
     return _OpenAIBackend(AsyncOpenAI(api_key=api_key), config)
 
 
+def _make_anthropic_backend(config: LLMConfig) -> _AnthropicBackend | None:
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if AsyncAnthropic is None or not api_key:
+        return None
+    return _AnthropicBackend(AsyncAnthropic(api_key=api_key), config)
+
+
 class LLM:
     """
     Thin facade over a resolved provider backend.
 
-    Only one real backend (OpenAI) exists at this point in the codebase's
-    history; provider selection (LLMConfig.provider / AURA_LLM_PROVIDER) is
-    introduced in a later change once a second backend exists to select
-    between. For now, resolution is simply: try OpenAI if available, else
-    the deterministic stub.
+    Provider selection follows this precedence:
+    1. Explicit LLMConfig.provider (if set)
+    2. AURA_LLM_PROVIDER env var (if set)
+    3. Auto-detection: Anthropic first, then OpenAI, then stub
     """
 
     def __init__(self, config: LLMConfig | None = None) -> None:
@@ -153,7 +162,19 @@ class LLM:
         self._backend = self._resolve_backend()
 
     def _resolve_backend(self):
-        return _make_openai_backend(self.config) or _StubBackend()
+        requested = (self.config.provider or os.getenv("AURA_LLM_PROVIDER") or "").strip().lower()
+
+        if requested == "anthropic":
+            return _make_anthropic_backend(self.config) or _StubBackend()
+        if requested == "openai":
+            return _make_openai_backend(self.config) or _StubBackend()
+
+        # Unset, or an unrecognized value: auto-detect, Anthropic first.
+        return (
+            _make_anthropic_backend(self.config)
+            or _make_openai_backend(self.config)
+            or _StubBackend()
+        )
 
     async def acomplete(
         self,
