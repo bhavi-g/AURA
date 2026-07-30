@@ -7,6 +7,10 @@ build/
 *.egg-info/
 .cache/
 
+# git worktrees + subagent-driven-development scratch workspace
+.worktrees/
+.superpowers/sdd/
+
 # secrets
 .env
 .env.*

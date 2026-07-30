@@ -83,3 +83,16 @@ def fake_slither_findings():
             "score": 1.0,
         },
     ]
+
+
+@pytest.fixture(autouse=True)
+def _clean_llm_env(monkeypatch):
+    """
+    Every test starts with a clean LLM-provider environment by default.
+    Tests that need a specific provider/key set them explicitly via their
+    own monkeypatch.setenv/delenv calls, which compose correctly with this
+    fixture regardless of call order.
+    """
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("AURA_LLM_PROVIDER", raising=False)
