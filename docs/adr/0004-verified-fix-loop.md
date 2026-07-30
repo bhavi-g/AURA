@@ -1,6 +1,6 @@
 # 0004 — Verify generated fixes before presenting them
 
-**Status:** proposed (2026-07-24)
+**Status:** accepted (2026-07-30) — implemented in [#26](https://github.com/bhavi-g/AURA/pull/26)
 
 ## Context
 `aura fix` currently emits an LLM-generated unified diff and stops. For a security
@@ -20,4 +20,4 @@ result `UNVERIFIED` rather than claiming success.
 - `fix` gains real dependencies on `solc` + analyzer at fix time (with degradation).
 - Fix latency increases (apply + compile + re-analyze, possibly ×retries).
 - "PR-ready" becomes a defensible claim, not marketing.
-- Full design: `docs/superpowers/specs/2026-07-24-verified-fix-loop-design.md` (P1).
+- Full design: `docs/superpowers/specs/2026-07-25-verified-fix-loop-design.md` (P1).
