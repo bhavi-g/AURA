@@ -7,9 +7,10 @@ import os
 from dataclasses import dataclass
 
 try:
-    # OpenAI client is optional. If it's not installed, we fall back to a dummy LLM.
+    # OpenAI client is optional at import time. If it's not installed, we
+    # fall back to a dummy LLM.
     from openai import AsyncOpenAI  # type: ignore
-except ImportError:  # package not installed yet
+except ImportError:  # package not installed
     AsyncOpenAI = None  # type: ignore[assignment]
 
 
@@ -18,44 +19,87 @@ class LLMConfig:
     """
     Configuration for the LLM client.
 
-    The defaults are chosen for cheap/small models once you enable OpenAI.
+    `model` defaults to None: each backend supplies its own provider-specific
+    default when no explicit model is requested.
     """
 
-    model: str = "gpt-4o-mini"
+    model: str | None = None
     temperature: float = 0.2
     max_tokens: int = 512
 
 
+class _StubBackend:
+    """Deterministic fallback used when no real provider is configured."""
+
+    async def acomplete(
+        self,
+        prompt: str,
+        *,
+        model: str | None,
+        temperature: float | None,
+        max_tokens: int | None,
+    ) -> str:
+        preview = prompt.strip().replace("\n", " ")
+        if len(preview) > 160:
+            preview = preview[:157] + "..."
+        return (
+            "[LLM STUB] No real LLM configured "
+            "(missing API key or provider package for the selected provider).\n"
+            f"Prompt preview: {preview}"
+        )
+
+
+class _OpenAIBackend:
+    """Wraps AsyncOpenAI. Request shape matches the pre-refactor implementation exactly."""
+
+    DEFAULT_MODEL = "gpt-4o-mini"
+
+    def __init__(self, client: AsyncOpenAI, config: LLMConfig) -> None:
+        self._client = client
+        self._config = config
+
+    async def acomplete(
+        self,
+        prompt: str,
+        *,
+        model: str | None,
+        temperature: float | None,
+        max_tokens: int | None,
+    ) -> str:
+        response = await self._client.chat.completions.create(
+            model=model or self._config.model or self.DEFAULT_MODEL,
+            temperature=self._config.temperature if temperature is None else temperature,
+            max_tokens=max_tokens or self._config.max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.choices[0].message.content or ""
+
+
+def _make_openai_backend(config: LLMConfig) -> _OpenAIBackend | None:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if AsyncOpenAI is None or not api_key:
+        return None
+    return _OpenAIBackend(AsyncOpenAI(api_key=api_key), config)
+
+
 class LLM:
     """
-    Thin wrapper around an LLM.
+    Thin facade over a resolved provider backend.
 
-    - If OpenAI is installed *and* OPENAI_API_KEY is set → use real OpenAI.
-    - Otherwise → use a dummy implementation that just echoes a placeholder.
-
-    This lets you develop AURA without paying anything right now.
+    Only one real backend (OpenAI) exists at this point in the codebase's
+    history; provider selection (LLMConfig.provider / AURA_LLM_PROVIDER) is
+    introduced in a later change once a second backend exists to select
+    between. For now, resolution is simply: try OpenAI if available, else
+    the deterministic stub.
     """
 
-    def __init__(
-        self,
-        config: LLMConfig | None = None,
-    ) -> None:
+    def __init__(self, config: LLMConfig | None = None) -> None:
         self.config = config or LLMConfig()
-        self._client: AsyncOpenAI | None = None
-        self._use_dummy: bool = True
+        self._backend = self._resolve_backend()
 
-        api_key = os.getenv("OPENAI_API_KEY")
+    def _resolve_backend(self):
+        return _make_openai_backend(self.config) or _StubBackend()
 
-        # Only enable real OpenAI if:
-        # - the package is installed, and
-        # - the API key is present
-        if AsyncOpenAI is not None and api_key:
-            self._client = AsyncOpenAI(api_key=api_key)  # type: ignore[call-arg]
-            self._use_dummy = False
-
-    # -----------------------------
-    # Public API
-    # -----------------------------
     async def acomplete(
         self,
         prompt: str,
@@ -64,23 +108,9 @@ class LLM:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
-        """
-        Async completion interface.
-
-        If no real LLM is configured, returns a deterministic dummy response so that
-        the rest of the pipeline can still run in development.
-        """
-        if self._use_dummy or self._client is None:
-            return self._dummy_response(prompt)
-
-        response = await self._client.chat.completions.create(
-            model=model or self.config.model,
-            temperature=self.config.temperature if temperature is None else temperature,
-            max_tokens=max_tokens or self.config.max_tokens,
-            messages=[{"role": "user", "content": prompt}],
+        return await self._backend.acomplete(
+            prompt, model=model, temperature=temperature, max_tokens=max_tokens
         )
-        # OpenAI v1: content is on message.content
-        return response.choices[0].message.content or ""
 
     def complete(
         self,
@@ -90,35 +120,6 @@ class LLM:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
-        """
-        Sync wrapper for CLI / non-async code.
-
-        Internally just runs `acomplete` in a fresh event loop.
-        """
         return asyncio.run(
-            self.acomplete(
-                prompt,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-        )
-
-    # -----------------------------
-    # Internal helpers
-    # -----------------------------
-    def _dummy_response(self, prompt: str) -> str:
-        """
-        Fallback when there is no real LLM configured.
-
-        This is intentionally simple and cheap; it just makes the rest of the
-        system usable in development without any API keys or payments.
-        """
-        preview = prompt.strip().replace("\n", " ")
-        if len(preview) > 160:
-            preview = preview[:157] + "..."
-        return (
-            "[LLM STUB] No real LLM configured "
-            "(missing OPENAI_API_KEY or openai package).\n"
-            f"Prompt preview: {preview}"
+            self.acomplete(prompt, model=model, temperature=temperature, max_tokens=max_tokens)
         )
