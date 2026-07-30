@@ -29,7 +29,7 @@
 
 ### Task 1: Refactor `llm.py` into a backend-class shape (behavior-preserving)
 
-Extracts today's single-class implementation into `_StubBackend` / `_OpenAIBackend` behind an `LLM` facade, with the `LLMConfig.model` default change and an `AURA_LLM_PROVIDER`/`LLMConfig.provider`-aware resolver that (for now) only recognizes `"openai"` explicitly — anything else auto-detects. No behavior changes for any existing caller.
+Extracts today's single-class implementation into `_StubBackend` / `_OpenAIBackend` behind an `LLM` facade, plus the `LLMConfig.model` default change. `LLMConfig.provider` and any `AURA_LLM_PROVIDER` env-var handling are deliberately **not** introduced here — with only one real backend in existence, branching on a provider value would just duplicate the same `_make_openai_backend(...) or _StubBackend()` line in both arms. That branching becomes meaningful (and gets added, tested, and documented) in Task 3, once Anthropic exists as a second real option. No behavior changes for any existing caller in this task.
 
 **Files:**
 - Modify: `src/aura/core/llm.py` (full rewrite of internals; public `LLM`/`LLMConfig` names preserved)
@@ -37,11 +37,11 @@ Extracts today's single-class implementation into `_StubBackend` / `_OpenAIBacke
 - Test: `tests/test_llm_provider_resolution.py` (new)
 
 **Interfaces:**
-- Produces: `LLMConfig(provider: str | None = None, model: str | None = None, temperature: float = 0.2, max_tokens: int = 512)`; `LLM(config: LLMConfig | None = None)` with `.complete(prompt, *, model=None, temperature=None, max_tokens=None) -> str` and `.acomplete(...)` (same signature, async); private `_StubBackend`, `_OpenAIBackend`, `_make_openai_backend(config) -> _OpenAIBackend | None` for Task 2/3 to extend.
+- Produces: `LLMConfig(model: str | None = None, temperature: float = 0.2, max_tokens: int = 512)`; `LLM(config: LLMConfig | None = None)` with `.complete(prompt, *, model=None, temperature=None, max_tokens=None) -> str` and `.acomplete(...)` (same signature, async); private `_StubBackend`, `_OpenAIBackend`, `_make_openai_backend(config) -> _OpenAIBackend | None` for Task 2/3 to extend. Task 3 adds the `provider` field to `LLMConfig` — do not add it here.
 
 - [ ] **Step 1: Run the existing test suite to confirm the green baseline**
 
-Run: `cd "/Users/goyal.bhavish/Desktop/Personal Projects/aura" && python -m pytest tests/test_llm_stub.py tests/test_api_explain_llm.py tests/test_explain_llm_prompt.py -v`
+Run (from the repo root of your worktree): `python -m pytest tests/test_llm_stub.py tests/test_api_explain_llm.py tests/test_explain_llm_prompt.py -v`
 Expected: all PASS (this is today's behavior, before any change).
 
 - [ ] **Step 2: Rewrite `src/aura/core/llm.py`**
@@ -69,12 +69,9 @@ class LLMConfig:
     Configuration for the LLM client.
 
     `model` defaults to None: each backend supplies its own provider-specific
-    default when no explicit model is requested. `provider` is an explicit
-    override (mainly for tests); when unset, resolution falls back to the
-    AURA_LLM_PROVIDER env var, then auto-detection.
+    default when no explicit model is requested.
     """
 
-    provider: str | None = None
     model: str | None = None
     temperature: float = 0.2
     max_tokens: int = 512
@@ -138,9 +135,11 @@ class LLM:
     """
     Thin facade over a resolved provider backend.
 
-    Provider resolution order: LLMConfig.provider (explicit) -> AURA_LLM_PROVIDER
-    env var -> auto-detect (first available provider with its package installed
-    and API key set) -> deterministic stub.
+    Only one real backend (OpenAI) exists at this point in the codebase's
+    history; provider selection (LLMConfig.provider / AURA_LLM_PROVIDER) is
+    introduced in a later change once a second backend exists to select
+    between. For now, resolution is simply: try OpenAI if available, else
+    the deterministic stub.
     """
 
     def __init__(self, config: LLMConfig | None = None) -> None:
@@ -148,12 +147,6 @@ class LLM:
         self._backend = self._resolve_backend()
 
     def _resolve_backend(self):
-        requested = (self.config.provider or os.getenv("AURA_LLM_PROVIDER") or "").strip().lower()
-
-        if requested == "openai":
-            return _make_openai_backend(self.config) or _StubBackend()
-
-        # Unset, or a value not (yet) recognized in this build: auto-detect.
         return _make_openai_backend(self.config) or _StubBackend()
 
     async def acomplete(
@@ -190,14 +183,16 @@ Expected: all PASS, identical to Step 1 (this is the refactor's regression check
 
 ```python
 # tests/test_llm_provider_resolution.py
+#
+# NOTE: this file grows in a later change once a second backend
+# (Anthropic) exists to select between. For now it only covers the
+# has-key / no-key OpenAI cases that are real today.
 
-from aura.core.llm import LLM, LLMConfig, _OpenAIBackend, _StubBackend
+from aura.core.llm import LLM, _OpenAIBackend, _StubBackend
 
 
-def test_no_config_no_keys_falls_back_to_stub(monkeypatch):
+def test_no_keys_falls_back_to_stub(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("AURA_LLM_PROVIDER", raising=False)
 
     llm = LLM()
 
@@ -205,28 +200,7 @@ def test_no_config_no_keys_falls_back_to_stub(monkeypatch):
 
 
 def test_openai_key_present_selects_openai_backend(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("AURA_LLM_PROVIDER", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-resolution-test")
-
-    llm = LLM()
-
-    assert isinstance(llm._backend, _OpenAIBackend)
-
-
-def test_explicit_openai_provider_without_key_falls_back_to_stub(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("AURA_LLM_PROVIDER", raising=False)
-
-    llm = LLM(LLMConfig(provider="openai"))
-
-    assert isinstance(llm._backend, _StubBackend)
-
-
-def test_env_var_provider_selection_matches_config_provider(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-resolution-test")
-    monkeypatch.setenv("AURA_LLM_PROVIDER", "openai")
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     llm = LLM()
 
@@ -236,12 +210,12 @@ def test_env_var_provider_selection_matches_config_provider(monkeypatch):
 - [ ] **Step 5: Run the new test file to verify it passes**
 
 Run: `python -m pytest tests/test_llm_provider_resolution.py -v`
-Expected: all 4 tests PASS.
+Expected: both tests PASS.
 
 - [ ] **Step 6: Run the full test suite**
 
 Run: `python -m pytest -v`
-Expected: all tests PASS (same count as the pre-refactor baseline, plus the 4 new resolution tests).
+Expected: all tests PASS (same count as the pre-refactor baseline, plus the 2 new resolution tests).
 
 - [ ] **Step 7: Commit**
 
@@ -262,7 +236,7 @@ Adds the `anthropic` dependency and a new, fully self-contained backend class wi
 - Test: `tests/test_llm_anthropic_backend.py` (new)
 
 **Interfaces:**
-- Consumes: `LLMConfig` from Task 1 (`provider`, `model`, `temperature`, `max_tokens` fields).
+- Consumes: `LLMConfig` from Task 1 (`model`, `temperature`, `max_tokens` fields — `provider` doesn't exist yet; this task's tests construct `LLMConfig()` directly and never touch resolution).
 - Produces: `_AnthropicBackend(client, config: LLMConfig)` with `.acomplete(prompt, *, model, temperature, max_tokens) -> str`, class attributes `_AnthropicBackend.DEFAULT_MODEL == "claude-sonnet-5"` and `_AnthropicBackend.SYSTEM_GUARD` (the exact guard string from Global Constraints) — Task 3's resolver wires this in by constructing `_AnthropicBackend(AsyncAnthropic(api_key=...), config)`.
 
 - [ ] **Step 1: Add the `anthropic` dependency**
@@ -273,9 +247,9 @@ Edit `pyproject.toml`'s `dependencies` list (in the `[project]` table) to add, r
   "anthropic>=0.40.0,<1.0.0",
 ```
 
-Then install it:
+Then install it (from the repo root of your worktree, with its `.venv` activated):
 
-Run: `cd "/Users/goyal.bhavish/Desktop/Personal Projects/aura" && pip install -e ".[dev]"`
+Run: `pip install -e ".[dev]"`
 Expected: install succeeds; `python -c "import anthropic; print(anthropic.__version__)"` prints a version string.
 
 - [ ] **Step 2: Write the failing test for `_AnthropicBackend`**
@@ -460,23 +434,42 @@ git commit -m "feat: add Anthropic backend (not yet wired into provider resoluti
 
 ### Task 3: Wire Anthropic into provider resolution + docs
 
-Extends `LLM._resolve_backend` to recognize `"anthropic"` explicitly and to try it first during auto-detection, adds the full precedence test matrix, and documents the new env vars.
+Adds `LLMConfig.provider`, extends `LLM._resolve_backend` to recognize `"anthropic"`/`"openai"` explicitly (via config or `AURA_LLM_PROVIDER`) and to try Anthropic first during auto-detection, adds the full precedence test matrix, and documents the new env vars.
 
 **Files:**
-- Modify: `src/aura/core/llm.py` (`_resolve_backend`, add `_make_anthropic_backend`)
-- Modify: `tests/test_llm_provider_resolution.py` (extend with anthropic + precedence cases)
+- Modify: `src/aura/core/llm.py` (`LLMConfig`, `_resolve_backend`, add `_make_anthropic_backend`)
+- Modify: `tests/test_llm_provider_resolution.py` (extend with provider-selection + precedence cases)
 - Modify: `.env.example`
 
 **Interfaces:**
-- Consumes: `_AnthropicBackend`, `AsyncAnthropic` (or `None`) from Task 2; `_make_openai_backend`, `_StubBackend` from Task 1.
-- Produces: final `LLM._resolve_backend` behavior described in Global Constraints (this is the last task — nothing downstream depends on new names here).
+- Consumes: `_AnthropicBackend`, `AsyncAnthropic` (or `None`) from Task 2; `_make_openai_backend`, `_StubBackend`, `_OpenAIBackend` from Task 1.
+- Produces: final `LLM._resolve_backend` behavior and `LLMConfig.provider` field described in Global Constraints (this is the last task — nothing downstream depends on new names here).
 
 - [ ] **Step 1: Write the failing tests — extend `tests/test_llm_provider_resolution.py`**
 
-Append these to the existing file (keep the four tests from Task 1 as-is):
+Replace the file's import line and append these tests (keep the two existing test functions from Task 1 as-is):
 
 ```python
-from aura.core.llm import _AnthropicBackend
+from aura.core.llm import LLM, LLMConfig, _AnthropicBackend, _OpenAIBackend, _StubBackend
+
+
+def test_explicit_openai_provider_without_key_falls_back_to_stub(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("AURA_LLM_PROVIDER", raising=False)
+
+    llm = LLM(LLMConfig(provider="openai"))
+
+    assert isinstance(llm._backend, _StubBackend)
+
+
+def test_env_var_openai_provider_selection(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-resolution-test")
+    monkeypatch.setenv("AURA_LLM_PROVIDER", "openai")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    llm = LLM()
+
+    assert isinstance(llm._backend, _OpenAIBackend)
 
 
 def test_anthropic_key_present_selects_anthropic_backend(monkeypatch):
@@ -534,9 +527,29 @@ def test_unrecognized_provider_value_falls_through_to_auto_detect(monkeypatch):
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_llm_provider_resolution.py -v`
-Expected: the 5 new tests FAIL (anthropic key present still selects `_OpenAIBackend`/`_StubBackend` because the resolver doesn't check anthropic yet); the original 4 tests still PASS.
+Expected: the 7 new tests FAIL (`LLMConfig(provider=...)` is a `TypeError: unexpected keyword argument`, since the field doesn't exist yet); the original 2 tests still PASS.
 
-- [ ] **Step 3: Wire Anthropic into the resolver in `src/aura/core/llm.py`**
+- [ ] **Step 3: Add `provider` to `LLMConfig` and wire Anthropic into the resolver in `src/aura/core/llm.py`**
+
+Update the `LLMConfig` dataclass to:
+
+```python
+@dataclass
+class LLMConfig:
+    """
+    Configuration for the LLM client.
+
+    `model` defaults to None: each backend supplies its own provider-specific
+    default when no explicit model is requested. `provider` is an explicit
+    override (mainly for tests); when unset, resolution falls back to the
+    AURA_LLM_PROVIDER env var, then auto-detection.
+    """
+
+    provider: str | None = None
+    model: str | None = None
+    temperature: float = 0.2
+    max_tokens: int = 512
+```
 
 Add this function next to `_make_openai_backend`:
 
