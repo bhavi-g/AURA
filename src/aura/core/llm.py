@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from dataclasses import dataclass
+from typing import Protocol
 
 try:
     # OpenAI client is optional at import time. If it's not installed, we
@@ -34,6 +35,19 @@ class LLMConfig:
     model: str | None = None
     temperature: float = 0.2
     max_tokens: int = 512
+
+
+class _Backend(Protocol):
+    """Structural contract shared by every LLM backend `LLM` can resolve to."""
+
+    async def acomplete(
+        self,
+        prompt: str,
+        *,
+        model: str | None,
+        temperature: float | None,
+        max_tokens: int | None,
+    ) -> str: ...
 
 
 class _StubBackend:
@@ -103,10 +117,13 @@ class _AnthropicBackend:
 
     DEFAULT_MODEL = "claude-sonnet-5"
 
+    # Generic wording deliberately: Anthropic's own guidance is that naming
+    # thinking tags explicitly is measurably less effective than a generic
+    # "no internal/system XML tags" instruction, and that telling the model
+    # not to reason can increase tag leakage rather than suppress it.
     SYSTEM_GUARD = (
         "Respond with only the requested output. Do not include internal "
-        "reasoning, <thinking> tags, or other internal/system XML tags in "
-        "your response."
+        "or system XML tags in your response."
     )
 
     def __init__(self, client: AsyncAnthropic, config: LLMConfig) -> None:
@@ -161,7 +178,7 @@ class LLM:
         self.config = config or LLMConfig()
         self._backend = self._resolve_backend()
 
-    def _resolve_backend(self):
+    def _resolve_backend(self) -> _Backend:
         requested = (self.config.provider or os.getenv("AURA_LLM_PROVIDER") or "").strip().lower()
 
         if requested == "anthropic":

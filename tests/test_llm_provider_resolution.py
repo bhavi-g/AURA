@@ -82,6 +82,16 @@ def test_env_var_anthropic_provider_selection(monkeypatch):
     assert isinstance(llm._backend, _AnthropicBackend)
 
 
+def test_explicit_config_provider_overrides_conflicting_env_var(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-resolution-test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key-for-resolution-test")
+    monkeypatch.setenv("AURA_LLM_PROVIDER", "openai")
+
+    llm = LLM(LLMConfig(provider="anthropic"))
+
+    assert isinstance(llm._backend, _AnthropicBackend)
+
+
 def test_unrecognized_provider_value_falls_through_to_auto_detect(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-resolution-test")
