@@ -58,8 +58,7 @@ def test_sends_the_exact_system_guard_string():
     kwargs = client.messages.create.await_args.kwargs
     assert kwargs["system"] == (
         "Respond with only the requested output. Do not include internal "
-        "reasoning, <thinking> tags, or other internal/system XML tags in "
-        "your response."
+        "or system XML tags in your response."
     )
 
 
