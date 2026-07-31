@@ -4,7 +4,7 @@
 > smart-contract security tool that takes developers from
 > **vulnerability detection → plain-English explanation → PR-ready fix**.
 
-_Last updated: 2026-07-24_
+_Last updated: 2026-07-31_
 
 ---
 
@@ -60,17 +60,38 @@ in CI, and fixes trustworthy enough to open as PRs.
 
 ## Roadmap (see `docs/phases/`)
 
-1. **Verified fixes (closed loop)** — trust the diffs
-2. Claude LLM backend + provider abstraction
+1. ✅ **Verified fixes (closed loop)** — trust the diffs (PR #26)
+2. ✅ Claude LLM backend + provider abstraction (PRs #28, #29)
 3. PyPI publish + install polish
 4. GitHub Action (SARIF Code Scanning + PR comments)
 5. Source-text analysis endpoint + deployed backend (unblocks web paste mode)
 
-## Known reality gaps (backlog, tracked so we don't forget)
+## Pending work (backlog, tracked so we don't forget)
 
+### CLI bugs (surfaced by the P1 final review, 2026-07-24 — still open)
+- `explain.py::summarize_findings` crashes (`IndexError`) on a finding with an
+  empty `description`.
+- `_analyzer_available()` doesn't account for the `pipx` fallback path.
+- No subprocess timeout on `git apply`/`git init`.
+- `aura fix` crashes uncaught on a directory target instead of a single file.
+- `REGRESSED` verdict's `new_findings` isn't surfaced in CLI text or `--json`
+  output.
+- `fix_cmd` always exits 0, even on `FAILED`/`REGRESSED`.
+
+### Deferred by design (P2, 2026-07-30 — not bugs, just out of scope)
+- "Improve explain/fix prompts now that we control the provider" — held off
+  until Claude's output on the *current* prompts can be compared against the
+  old OpenAI output.
+- Cosmetic: `openai` line in `pyproject.toml`'s dependency list uses a 4-space
+  indent vs. 2-space everywhere else, including the `anthropic` line added
+  next to it. No action needed, noted only.
+
+### Known reality gaps (frontend/deploy)
 - Live demo can't work: `render.yaml` deploys only the static frontend; backend
   URL is a placeholder — no backend is deployed (addressed in P5)
 - Frontend "paste" mode sends a fake path and never uploads source (P5)
 - `/audit` uses an in-memory `FAKE_DB` while the rest uses SQLModel (P5)
-- `docs/ARCHITECTURE.md` and `.env.example` are stale (Mongo/JWT/queue) and
-  should be rewritten to match the real system
+- `docs/ARCHITECTURE.md` is stale (describes a Mongo/JWT/task-queue/fuzzer/
+  neural-scorer design that was never built) and should be rewritten to match
+  the real system. (`.env.example` was brought current for the LLM section in
+  P2 — no longer part of this gap.)
