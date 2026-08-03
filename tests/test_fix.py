@@ -94,6 +94,17 @@ def test_run_git_apply_failure_on_malformed_diff(tmp_path):
     assert err != ""
 
 
+def test_run_git_apply_times_out(monkeypatch, tmp_path):
+    def _raise_timeout(*a, **k):
+        raise sp.TimeoutExpired(cmd=["git", "apply"], timeout=30)
+
+    monkeypatch.setattr(fix.subprocess, "run", _raise_timeout)
+
+    ok, err = fix._run_git_apply(tmp_path, "--- a/x\n+++ b/x\n")
+    assert ok is False
+    assert "timed out" in err
+
+
 class FakeLLM:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -239,6 +250,23 @@ def test_verify_fix_verified(monkeypatch, sample_contract, fake_slither_findings
     assert result.verdict == "VERIFIED"
     assert result.patched_source is not None
     assert "patched" in result.patched_source
+
+
+def test_verify_fix_failed_when_git_init_times_out(monkeypatch, sample_contract):
+    def _raise_timeout(*a, **k):
+        raise sp.TimeoutExpired(cmd=["git", "init"], timeout=30)
+
+    monkeypatch.setattr(fix.subprocess, "run", _raise_timeout)
+
+    result = fix.verify_fix(
+        str(sample_contract),
+        "not a real diff\n",
+        _original_finding(),
+        solc_available=True,
+        analyzer_available=True,
+    )
+    assert result.verdict == "FAILED"
+    assert "verification workspace" in result.detail
 
 
 def test_verify_fix_failed_on_bad_apply(monkeypatch, sample_contract):
@@ -585,6 +613,16 @@ def test_analyzer_available_reflects_which(monkeypatch):
 
     monkeypatch.setattr(fix.shutil, "which", lambda name: None)
     assert fix._analyzer_available() is False
+
+
+def test_analyzer_available_true_via_pipx_fallback_when_slither_missing(monkeypatch):
+    # SlitherAnalyzer.run() falls back to `pipx run --spec slither-analyzer
+    # slither ...` when slither isn't directly on PATH, so availability
+    # should follow suit rather than reporting UNVERIFIED unnecessarily.
+    monkeypatch.setattr(
+        fix.shutil, "which", lambda name: "/usr/bin/pipx" if name == "pipx" else None
+    )
+    assert fix._analyzer_available() is True
 
 
 def test_verify_fix_loop_retries_and_succeeds(monkeypatch, sample_contract, fake_slither_findings):
