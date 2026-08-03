@@ -85,15 +85,12 @@ in CI, and fixes trustworthy enough to open as PRs.
 - ✅ `REGRESSED`'s `new_findings` is now included in both `--json` output and
   printed (rule + severity) in text output.
 - ✅ `fix_cmd` now exits 1 on `FAILED`/`REGRESSED` verdicts (was always 0).
-
-New backlog item surfaced while verifying the directory-target fix (not one
-of the above, left open — doesn't affect the documented `aura ...` /
-`python -m aura ...` entrypoints):
-- `src/aura/cli.py`'s `if __name__ == "__main__": app()` guard sits mid-file
-  (before the `fix` command is defined), so the undocumented
-  `python -m aura.cli` invocation style silently never registers `fix` (or
-  anything else defined after the guard). Trivial fix (move the guard to the
-  true end of file) but out of scope for this pass.
+- ✅ `src/aura/cli.py`'s `if __name__ == "__main__": app()` guard sat mid-file
+  (before the `fix` command was defined), so the undocumented
+  `python -m aura.cli` invocation style silently never registered `fix` (or
+  anything else defined after the guard). Fixed 2026-08-02: moved the guard
+  to the true end of the file; regression test added
+  (`test_module_cli_registers_commands_defined_after_the_entrypoint_guard`).
 
 ### Deferred by design (P2, 2026-07-30 — not bugs, just out of scope)
 - "Improve explain/fix prompts now that we control the provider" — held off
