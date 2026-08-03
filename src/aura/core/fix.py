@@ -57,7 +57,10 @@ def _run_git_apply(workdir: Path, diff_text: str) -> tuple[bool, str]:
             cwd=workdir,
             capture_output=True,
             text=True,
+            timeout=30,
         )
+    except subprocess.TimeoutExpired:
+        return False, "git apply timed out"
     finally:
         patch_file.unlink(missing_ok=True)
     if proc.returncode != 0:
@@ -187,7 +190,15 @@ def verify_fix(
         original_source = Path(target_path).read_text(encoding="utf-8", errors="ignore")
         dest.write_text(original_source, encoding="utf-8")
 
-        subprocess.run(["git", "init", "-q"], cwd=workdir, check=True)
+        try:
+            subprocess.run(["git", "init", "-q"], cwd=workdir, check=True, timeout=30)
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
+            return VerifyResult(
+                verdict="FAILED",
+                diff=diff_text,
+                attempts=0,
+                detail=f"could not initialize verification workspace: {exc}",
+            )
 
         # Control run: confirm the pristine copy — in this same isolated
         # workspace/environment — actually reproduces the finding we're
@@ -283,7 +294,10 @@ def _solc_available() -> bool:
 
 
 def _analyzer_available() -> bool:
-    return shutil.which("slither") is not None
+    # SlitherAnalyzer.run() falls back to `pipx run --spec slither-analyzer
+    # slither ...` when `slither` isn't on PATH (see slither_adapter.py), so
+    # verification is possible whenever either is available.
+    return shutil.which("slither") is not None or shutil.which("pipx") is not None
 
 
 def verify_fix_loop(

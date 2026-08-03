@@ -451,6 +451,13 @@ def fix_cmd(
     - Fix, verify, and apply to the file:
         aura fix <target> --rule <rule_id> --write
     """
+    if not Path(target).is_file():
+        typer.echo(
+            f"Error: '{target}' is not a file. `aura fix` only supports a single "
+            "Solidity file target (see docs/PROJECT_BRIEF.md 'v1 does NOT')."
+        )
+        raise typer.Exit(code=1)
+
     res = run_analysis(target, project_name=project)
     findings = res.get("findings", [])
 
@@ -494,12 +501,19 @@ def fix_cmd(
             "attempts": result.attempts,
             "detail": result.detail,
             "degraded_reason": result.degraded_reason,
+            "new_findings": result.new_findings,
             "diff": result.diff,
         }
         typer.echo(json.dumps(payload, indent=2))
     else:
         typer.echo(f"Verdict: {result.verdict} (attempt {result.attempts}/{max_retries})")
         typer.echo(result.detail)
+        if result.new_findings:
+            typer.echo("\nNew findings introduced:")
+            for nf in result.new_findings:
+                rid = nf.get("rule_id", "unknown-rule")
+                sev = str(nf.get("severity", "UNKNOWN")).upper()
+                typer.echo(f"- [{sev}] {rid}")
         typer.echo("")
         typer.echo(result.diff)
 
@@ -509,3 +523,6 @@ def fix_cmd(
             typer.echo(f"\nWrote verified fix to {target}")
         else:
             typer.echo(f"\nRefusing to write: verdict is {result.verdict}, not VERIFIED.")
+
+    if result.verdict in ("FAILED", "REGRESSED"):
+        raise typer.Exit(code=1)

@@ -4,7 +4,7 @@
 > smart-contract security tool that takes developers from
 > **vulnerability detection → plain-English explanation → PR-ready fix**.
 
-_Last updated: 2026-07-31_
+_Last updated: 2026-08-02_
 
 ---
 
@@ -68,15 +68,32 @@ in CI, and fixes trustworthy enough to open as PRs.
 
 ## Pending work (backlog, tracked so we don't forget)
 
-### CLI bugs (surfaced by the P1 final review, 2026-07-24 — still open)
-- `explain.py::summarize_findings` crashes (`IndexError`) on a finding with an
-  empty `description`.
-- `_analyzer_available()` doesn't account for the `pipx` fallback path.
-- No subprocess timeout on `git apply`/`git init`.
-- `aura fix` crashes uncaught on a directory target instead of a single file.
-- `REGRESSED` verdict's `new_findings` isn't surfaced in CLI text or `--json`
-  output.
-- `fix_cmd` always exits 0, even on `FAILED`/`REGRESSED`.
+### CLI bugs (surfaced by the P1 final review, 2026-07-24 — closed 2026-08-02)
+- ✅ `explain.py::summarize_findings` crashed (`IndexError`) on a finding with
+  an empty `description`. Fixed: `.splitlines()` on an empty string returns
+  `[]`, not `[""]`; guarded the index.
+- ✅ `_analyzer_available()` now also treats `pipx` on `PATH` as available,
+  matching `SlitherAnalyzer.run()`'s real `pipx run --spec slither-analyzer`
+  fallback (previously only checked `shutil.which("slither")`, so a
+  pipx-only install always reported `UNVERIFIED`).
+- ✅ `git apply` and `git init` (`src/aura/core/fix.py`) now pass
+  `timeout=30`; both failure paths return a controlled `FAILED` verdict
+  instead of hanging/crashing.
+- ✅ `aura fix` now validates the target is a file up front and exits 1 with
+  a clear message on a directory (or missing path) instead of crashing with
+  an uncaught `IsADirectoryError`.
+- ✅ `REGRESSED`'s `new_findings` is now included in both `--json` output and
+  printed (rule + severity) in text output.
+- ✅ `fix_cmd` now exits 1 on `FAILED`/`REGRESSED` verdicts (was always 0).
+
+New backlog item surfaced while verifying the directory-target fix (not one
+of the above, left open — doesn't affect the documented `aura ...` /
+`python -m aura ...` entrypoints):
+- `src/aura/cli.py`'s `if __name__ == "__main__": app()` guard sits mid-file
+  (before the `fix` command is defined), so the undocumented
+  `python -m aura.cli` invocation style silently never registers `fix` (or
+  anything else defined after the guard). Trivial fix (move the guard to the
+  true end of file) but out of scope for this pass.
 
 ### Deferred by design (P2, 2026-07-30 — not bugs, just out of scope)
 - "Improve explain/fix prompts now that we control the provider" — held off
