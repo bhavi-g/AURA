@@ -27,3 +27,15 @@ def test_console_script_exists_and_works():
     assert exe, "console script 'aura' not found on PATH (is venv active and package reinstalled?)"
     out = run([exe, "version"]).stdout
     assert "AURA v" in out
+
+
+def test_module_cli_registers_commands_defined_after_the_entrypoint_guard():
+    # Regression test: `if __name__ == "__main__": app()` used to sit mid-file
+    # in cli.py, before the `fix` command's decorator. Running the module
+    # directly executed `app()` at that point in top-to-bottom module
+    # evaluation, so `fix` (and anything else below the guard) was never
+    # registered when invoked as `python -m aura.cli` specifically (the
+    # `aura` console script and `python -m aura` were unaffected, since they
+    # import the fully-evaluated module before calling `app()` themselves).
+    out = run([sys.executable, "-m", "aura.cli", "--help"]).stdout
+    assert "fix" in out
