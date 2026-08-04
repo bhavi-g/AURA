@@ -40,7 +40,7 @@ def hello(
 def version_cmd() -> None:
     """Print CLI version in the format tests expect."""
     try:
-        v = metadata.version("aura")
+        v = metadata.version("aura-audit")
     except metadata.PackageNotFoundError:
         v = "0.0.0-dev"
     typer.echo(f"AURA v{v}")
@@ -49,7 +49,7 @@ def version_cmd() -> None:
 def _version_callback(value: bool | None) -> None:
     if value:
         try:
-            v = metadata.version("aura")
+            v = metadata.version("aura-audit")
         except metadata.PackageNotFoundError:
             v = "0.0.0-dev"
         # tests that call `-m aura.cli --version` expect just the raw version
