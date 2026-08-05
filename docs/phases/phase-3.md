@@ -3,7 +3,7 @@
 **Status:** planned
 
 ## Why
-The #1 adoption blocker for an OSS CLI is install friction. `pipx install aura`
+The #1 adoption blocker for an OSS CLI is install friction. `pipx install aura-audit`
 should just work.
 
 ## What v1 of this does
@@ -17,5 +17,5 @@ should just work.
 - Bundling solc/slither binaries into the wheel.
 
 ## Success criteria
-- `pipx install aura` on a clean machine yields a working `aura` CLI
+- `pipx install aura-audit` on a clean machine yields a working `aura` CLI
 - Prereqs documented and reproducible from the README alone

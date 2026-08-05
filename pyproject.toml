@@ -1,11 +1,25 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=64", "setuptools_scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aura"
-version = "0.0.0"
+name = "aura-audit"
+description = "Solidity smart-contract security tool: detect vulnerabilities, explain them in plain English, and generate verified fix diffs."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+  { name = "Bhavish Goyal" },
+]
 requires-python = ">=3.11"
+dynamic = ["version"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Security",
+]
 dependencies = [
   "fastapi",
   "uvicorn",
@@ -16,6 +30,11 @@ dependencies = [
     "openai>=1.55.0,<2.0.0",
   "anthropic>=0.47.0,<1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/bhavi-g/AURA"
+Repository = "https://github.com/bhavi-g/AURA"
+Issues = "https://github.com/bhavi-g/AURA/issues"
 
 [project.scripts]
 aura = "aura.cli:app"
@@ -29,7 +48,11 @@ dev = [
   "ruff>=0.4",
   "black>=24",
   "isort>=5.12",
+  "build>=1.2",
 ]
+
+[tool.setuptools_scm]
+fallback_version = "0.0.0"
 
 [tool.setuptools.package-dir]
 "" = "src"

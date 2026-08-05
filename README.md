@@ -32,15 +32,45 @@ AURA currently runs as a **CLI tool**.
 
 ### Prerequisites
 
-* Python 3.10+
-* Poetry
-* `solc` available in PATH
-* Slither installed
+* Python 3.11+
+* `solc` and Slither available on `PATH` (see below)
 
-### Install dependencies
+### Install AURA
+
+Recommended — isolated CLI install via [pipx](https://pipx.pypa.io/) (requires
+`pipx`: `python -m pip install --user pipx && pipx ensurepath`):
+
+```bash
+pipx install aura-audit
+```
+
+Or with pip:
+
+```bash
+pip install aura-audit
+```
+
+Either way, the installed command is `aura` — `aura-audit` is just the PyPI
+distribution name (`aura` was already taken by an unrelated project).
+
+### Install solc and Slither
+
+AURA's analyzers shell out to `solc` and Slither, which are not bundled with
+the pip package and need to be on `PATH` separately:
+
+```bash
+pipx install solc-select
+solc-select install 0.8.20
+solc-select use 0.8.20
+
+pipx install slither-analyzer
+```
+
+### Contributing / running from source
 
 ```bash
 poetry install
+poetry run aura --help
 ```
 
 ---

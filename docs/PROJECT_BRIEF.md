@@ -4,7 +4,7 @@
 > smart-contract security tool that takes developers from
 > **vulnerability detection → plain-English explanation → PR-ready fix**.
 
-_Last updated: 2026-08-02_
+_Last updated: 2026-08-05_
 
 ---
 
@@ -99,6 +99,54 @@ in CI, and fixes trustworthy enough to open as PRs.
 - Cosmetic: `openai` line in `pyproject.toml`'s dependency list uses a 4-space
   indent vs. 2-space everywhere else, including the `anthropic` line added
   next to it. No action needed, noted only.
+
+### Tooling drift (surfaced by the phase-3 PyPI-publish work, 2026-08-04 — not fixed, just logged)
+- `poetry install` / `poetry run` do not work on this repo right now.
+  `pyproject.toml` uses a plain PEP 621 `[project]` table with a
+  `setuptools`/`setuptools_scm` build backend (no `[tool.poetry]` section),
+  but `poetry.lock` was never regenerated or removed to match, so Poetry's
+  consistency checks reject it: `poetry install` on unmodified `main`
+  (confirmed at commit `f12ebe3`, before the phase-3 branch existed) fails
+  with `pyproject.toml changed significantly since poetry.lock was last
+  generated. Run poetry lock to fix the lock file.` Pre-dates phase 3, not
+  caused by it. Worked around throughout phase 3 (and matching what
+  `.github/workflows/ci.yml` already does) by using
+  `pip install -e ".[dev]"` into a venv and running `pytest`/`ruff`/
+  `black`/`isort` directly from that venv instead of `poetry install`/
+  `poetry run`. Needs either a `poetry lock` regeneration or dropping Poetry
+  as a supported local workflow in favor of the venv/pip path CI already
+  uses — not decided here.
+
+### Release readiness (found in Phase 3's final review, 2026-08-04)
+- The PyPI trusted-publisher manual setup checklist (configuring the
+  trusted publisher on PyPI's project settings to match
+  `.github/workflows/release.yml`) currently only lives in the (now-historical)
+  implementation plan file, not somewhere discoverable from `release.yml` or
+  `CONTRIBUTING.md`. Should be promoted somewhere durable before the first
+  real `v*` tag is pushed.
+- The sdist (`python -m build`'s `.tar.gz` output) currently ships the entire
+  git-tracked repo (240+ files, including old scaffolding zips, docs,
+  `frontend/`, docker configs) because there's no `MANIFEST.in` pruning it.
+  Confirmed not a secrets leak, but poor packaging hygiene — should add a
+  `MANIFEST.in` before the first real publish.
+- `src/aura/__init__.py` and the two call sites in `src/aura/cli.py`
+  (`version_cmd`, `_version_callback`) each independently resolve the
+  installed distribution's version via their own `try`/`except
+  metadata.PackageNotFoundError` block, and use two different "not installed"
+  fallback sentinel strings (`"0.0.0.dev0"` in `__init__.py` vs. `"0.0.0-dev"`
+  in `cli.py`). This was deliberately left as-is by an earlier task review —
+  changing it now would alter output shapes, which `docs/NEVER_DO.md` says
+  only to do deliberately — but worth revisiting together in a future pass.
+- `release.yml`'s `publish` job has no test/lint gate before publishing to
+  PyPI — a tag push goes straight to build → publish, with nothing verifying
+  the code at that tag actually passes tests.
+- `fastapi`/`uvicorn` are unconditional runtime dependencies in
+  `pyproject.toml`, but the shipped wheel (`src/aura/`) doesn't import
+  either — they're only used by the separate `api/` FastAPI app at the repo
+  root, which isn't packaged. Every `pipx install aura-audit` pulls them for
+  nothing. Fixing this needs care (would need an `api` extra, and
+  `tests/test_api.py` depends on fastapi being present in the dev/test
+  environment) — not a mechanical fix, backlog only.
 
 ### Known reality gaps (frontend/deploy)
 - Live demo can't work: `render.yaml` deploys only the static frontend; backend
