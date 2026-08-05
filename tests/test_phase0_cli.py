@@ -29,6 +29,19 @@ def test_console_script_exists_and_works():
     assert "AURA v" in out
 
 
+def test_distribution_is_installed_as_aura_audit():
+    from importlib import metadata
+
+    assert metadata.version("aura-audit")
+
+
+def test_version_flag_matches_dunder_version():
+    import aura
+
+    out = run([shutil.which("aura"), "--version"]).stdout.strip()
+    assert out == aura.__version__
+
+
 def test_module_cli_registers_commands_defined_after_the_entrypoint_guard():
     # Regression test: `if __name__ == "__main__": app()` used to sit mid-file
     # in cli.py, before the `fix` command's decorator. Running the module
