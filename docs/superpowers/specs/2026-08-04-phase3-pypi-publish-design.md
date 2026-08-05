@@ -43,9 +43,13 @@ fallback_version = "0.0.0"
 with `setuptools_scm` added to `[build-system].requires`. The version is then
 derived from the git tag at build/install time (tag `v0.5.0` → package
 version `0.5.0`; commits after a tag get a PEP 440 dev suffix, e.g.
-`0.5.1.dev3+g1a2b3c4`). `fallback_version` covers builds with no reachable
-tag (e.g. a shallow clone or a tarball with no `.git`) so the build doesn't
-hard-fail — it degrades to `0.0.0` instead.
+`0.5.1.dev3+g1a2b3c4`). `fallback_version` only covers builds where SCM
+parsing fails entirely — i.e. no `.git` directory at all (a tarball) — so the
+build doesn't hard-fail; it degrades to `0.0.0` instead. A shallow/tagless
+clone (`.git` present, but no reachable tag) is a different case:
+setuptools_scm still finds a `.git` directory, so it does *not* fall back —
+it derives a fabricated version from the commit hash alone, e.g.
+`0.0.1.dev1+g1a2b3c4`.
 
 `src/aura/__init__.py` currently hardcodes `__version__ = "0.0.1"` (already
 stale vs. the `v0.4.0` tag). Replace with a read of the installed
@@ -68,8 +72,10 @@ currently defaults to a shallow clone (`fetch-depth: 1`, no tags), which
 would make `setuptools_scm` unable to see any tag during the editable install
 every CI job depends on (`pip install -e ".[dev]"`). Add
 `fetch-depth: 0` there so tags are visible. (`fallback_version` is a safety
-net, not a substitute for this — we want CI to reflect the real derived
-version, not silently fall back to `0.0.0` on every run.)
+net for tarball-only builds, not a substitute for this — a shallow/tagless
+checkout doesn't hit that fallback at all, it silently derives a fabricated
+dev version like `0.0.1.dev1+g1a2b3c4` from the commit hash. We want CI to
+reflect the real derived version, not a fabricated one.)
 
 **Test impact:** `tests/test_phase0_cli.py::test_package_import_and_version`
 asserts `re.match(r"^\d+\.\d+\.\d+", aura.__version__)`. Both a real
