@@ -1,0 +1,55 @@
+include LICENSE
+include README.md
+include pyproject.toml
+
+recursive-include src *.py
+
+prune .aura
+prune .github
+prune .pytest_cache
+prune .ruff_cache
+prune .superpowers
+prune .venv
+prune .vscode
+prune adapters
+prune api
+prune ci
+prune cli
+prune configs
+prune contracts
+prune data
+prune docker
+prune docs
+prune evaluation
+prune frontend
+prune reports
+prune samples
+prune schemas
+prune security
+prune tests
+prune tools
+prune utils
+
+exclude .editorconfig
+exclude .env.example
+exclude .flake8
+exclude .gitignore
+exclude .pre-commit-config.yaml
+exclude AURA_Prod_Enhancements_v2.zip
+exclude AURA_Prod_Starter_Kit_v1.zip
+exclude CHANGELOG.md
+exclude CLAUDE.md
+exclude CODEOWNERS
+exclude CONTRIBUTING.md
+exclude MANIFEST.in
+exclude Makefile
+exclude SECURITY.md
+exclude docker-compose.yml
+exclude mypy.ini
+exclude poetry.lock
+exclude pyproject.toml.bak
+exclude render.yaml
+
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude .DS_Store
