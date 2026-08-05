@@ -124,11 +124,12 @@ in CI, and fixes trustworthy enough to open as PRs.
   implementation plan file, not somewhere discoverable from `release.yml` or
   `CONTRIBUTING.md`. Should be promoted somewhere durable before the first
   real `v*` tag is pushed.
-- The sdist (`python -m build`'s `.tar.gz` output) currently ships the entire
-  git-tracked repo (240+ files, including old scaffolding zips, docs,
-  `frontend/`, docker configs) because there's no `MANIFEST.in` pruning it.
-  Confirmed not a secrets leak, but poor packaging hygiene — should add a
-  `MANIFEST.in` before the first real publish.
+- ✅ The sdist (`python -m build`'s `.tar.gz` output) used to ship the entire
+  git-tracked repo (242 files, including old scaffolding zips, docs,
+  `frontend/`, docker configs) because there was no `MANIFEST.in` pruning it.
+  Confirmed not a secrets leak, just poor packaging hygiene. Fixed
+  2026-08-05: added `MANIFEST.in`, sdist now ships 50 files (package source +
+  `LICENSE`/`README.md`/`pyproject.toml`), before the first real publish.
 - `src/aura/__init__.py` and the two call sites in `src/aura/cli.py`
   (`version_cmd`, `_version_callback`) each independently resolve the
   installed distribution's version via their own `try`/`except
