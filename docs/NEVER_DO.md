@@ -21,6 +21,21 @@ these, stop and reconsider.
 - **Never expand scope mid-phase.** One phase file at a time. New ideas go to the
   backlog in `PROJECT_BRIEF.md`, not into the current change.
 
+## Packaging / releases
+- **Never assume a package name is available on a registry** (PyPI, npm,
+  etc.) without checking first. `aura` looked like the obvious PyPI name but
+  was already registered by an unrelated project — the distribution name
+  (`aura-audit`) had to diverge from the CLI command and GitHub repo name as
+  a result (see ADR 0005).
+- **Never push a version tag / trigger a real publish without the human's
+  explicit go-ahead.** PyPI versions are immutable (yank-only, not
+  deletable) — a bad release can't be silently corrected.
+- **Never trust a source diff alone to know what a release ships.** Sdist
+  and wheel contents can differ from what's in git (the sdist shipped 242
+  files, including stale scaffolding zips, before `MANIFEST.in` pruned it in
+  Phase 3) — inspect the actual built artifact (`python -m build` + `tar
+  tzf`/`unzip -l`) before trusting a release is clean.
+
 ## Process
 - **Never write code before reading** the latest `docs/sessions/` log and the ADR
   index (`docs/adr/README.md`).

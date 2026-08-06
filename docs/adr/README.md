@@ -11,6 +11,8 @@ Format: `NNNN-short-title.md`. Statuses: `accepted`, `superseded`, `proposed`.
 | [0002](0002-slither-primary-detector.md) | Slither as primary detector; Mythril optional | accepted |
 | [0003](0003-llm-provider-abstraction.md) | LLM behind a thin wrapper; stub fallback; Claude next | accepted |
 | [0004](0004-verified-fix-loop.md) | Verify generated fixes before presenting them | accepted |
+| [0005](0005-dynamic-versioning-trusted-publishing.md) | Dynamic versioning + PyPI trusted publishing | accepted |
 
 > ADRs 0001–0003 are **backfilled** from decisions already visible in the code
-> (this project is 20+ PRs in). 0004 is the decision made on 2026-07-24.
+> (this project is 20+ PRs in). 0004 is the decision made on 2026-07-24. 0005
+> is the decision made on 2026-08-05 (Phase 3).
