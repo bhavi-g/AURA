@@ -195,3 +195,72 @@ def test_fix_cmd_exits_nonzero_and_surfaces_new_findings_on_regressed(
     assert result_json.exit_code == 1
     payload = json.loads(result_json.stdout)
     assert payload["new_findings"] == [{"rule_id": "tx-origin", "severity": "HIGH"}]
+
+
+def test_analyze_sarif_writes_a_sarif_file(
+    monkeypatch, temp_cwd, sample_contract, fake_slither_findings
+):
+    from aura.core.analyzers import slither_adapter
+
+    monkeypatch.setattr(
+        slither_adapter.SlitherAnalyzer,
+        "run",
+        lambda self, target: fake_slither_findings,
+    )
+
+    out = temp_cwd / "out.sarif"
+    runner = CliRunner()
+    result = runner.invoke(app, ["analyze", str(sample_contract), "--sarif", str(out)])
+
+    assert result.exit_code == 0
+    data = json.loads(out.read_text())
+    assert data["version"] == "2.1.0"
+    assert data["runs"][0]["tool"]["driver"]["name"] == "AURA"
+    rule_ids = {r["ruleId"] for r in data["runs"][0]["results"]}
+    assert "reentrancy-eth" in rule_ids
+
+
+def test_analyze_sarif_creates_missing_parent_directories(
+    monkeypatch, temp_cwd, sample_contract, fake_slither_findings
+):
+    from aura.core.analyzers import slither_adapter
+
+    monkeypatch.setattr(
+        slither_adapter.SlitherAnalyzer,
+        "run",
+        lambda self, target: fake_slither_findings,
+    )
+
+    out = temp_cwd / "nested" / "dir" / "out.sarif"
+    runner = CliRunner()
+    result = runner.invoke(app, ["analyze", str(sample_contract), "--sarif", str(out)])
+
+    assert result.exit_code == 0
+    assert out.is_file()
+
+
+def test_analyze_sarif_flag_does_not_change_stdout(
+    monkeypatch, temp_cwd, sample_contract, fake_slither_findings
+):
+    """docs/NEVER_DO.md: --sarif is additive; it must not alter tested output shapes."""
+    from aura.core.analyzers import slither_adapter
+
+    monkeypatch.setattr(
+        slither_adapter.SlitherAnalyzer,
+        "run",
+        lambda self, target: fake_slither_findings,
+    )
+
+    runner = CliRunner()
+    plain = runner.invoke(app, ["analyze", str(sample_contract)])
+    with_sarif = runner.invoke(
+        app, ["analyze", str(sample_contract), "--sarif", str(temp_cwd / "a.sarif")]
+    )
+    assert plain.stdout == with_sarif.stdout
+
+    plain_json = runner.invoke(app, ["analyze", str(sample_contract), "--json"])
+    json_with_sarif = runner.invoke(
+        app,
+        ["analyze", str(sample_contract), "--json", "--sarif", str(temp_cwd / "b.sarif")],
+    )
+    assert json.loads(json_with_sarif.stdout).keys() == json.loads(plain_json.stdout).keys()
