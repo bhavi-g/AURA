@@ -18,8 +18,8 @@ replace professional audits or formal verification.
 ## Audience & positioning
 
 Primary audience: **Solidity developers who install and adopt the tool** (OSS
-dev tool, not a demo). Success looks like `pipx install aura`, a GitHub Action
-in CI, and fixes trustworthy enough to open as PRs.
+dev tool, not a demo). Success looks like `pipx install aura-audit`, a GitHub
+Action in CI, and fixes trustworthy enough to open as PRs.
 
 ## Scope
 
@@ -43,15 +43,22 @@ in CI, and fixes trustworthy enough to open as PRs.
 - **Language/runtime:** Python 3.11+
 - **Detection:** Slither (`slither_adapter`), Mythril (`mythril_adapter`, degrades
   to empty if `myth` not on PATH); requires `solc` on PATH
-- **LLM:** OpenAI (`gpt-4o-mini`) via `openai`; falls back to a deterministic
-  stub with no `OPENAI_API_KEY` (Claude backend planned — see ADR 0003)
+- **LLM:** OpenAI (`gpt-4o-mini`) and Anthropic Claude, behind a provider
+  abstraction selected via `AURA_LLM_PROVIDER` (see ADR 0003); falls back to
+  a deterministic stub with no API key configured
 - **Persistence:** SQLModel / SQLAlchemy (SQLite)
 - **Interfaces:** Typer CLI (`aura ...`), FastAPI (`api/main.py`), React + Vite + TS (`frontend/`)
-- **Infra:** Poetry, Docker, pre-commit, GitHub Actions CI (+ SARIF upload, F1 eval guard)
+- **Packaging/release:** PyPI distribution `aura-audit` (CLI command stays
+  `aura`), version derived from git tags via `setuptools_scm`, published via
+  PyPI trusted publishing on `v*` tag push — see ADR 0005
+- **Infra:** Poetry (dev workflow), pip/setuptools build backend, Docker,
+  pre-commit, GitHub Actions CI (+ SARIF upload, F1 eval guard)
 
 ## Success criteria
 
-1. `pipx install aura` works on a clean machine (P3)
+1. ✅ `pipx install aura-audit` works on a clean machine (P3, PRs #33/#34) —
+   verified end-to-end 2026-08-05: fresh venv → `pip install aura-audit` →
+   `aura --version` → `0.5.0`
 2. Generated fixes are **verified** (apply → compile → finding gone) before being
    presented as PR-ready (P1 — the credibility bar)
 3. A GitHub Action posts findings on PRs and uploads SARIF to Code Scanning (P4)
@@ -62,7 +69,8 @@ in CI, and fixes trustworthy enough to open as PRs.
 
 1. ✅ **Verified fixes (closed loop)** — trust the diffs (PR #26)
 2. ✅ Claude LLM backend + provider abstraction (PRs #28, #29)
-3. PyPI publish + install polish
+3. ✅ PyPI publish + install polish (PRs #33, #34) — `aura-audit` v0.5.0
+   [live on PyPI](https://pypi.org/project/aura-audit/0.5.0/)
 4. GitHub Action (SARIF Code Scanning + PR comments)
 5. Source-text analysis endpoint + deployed backend (unblocks web paste mode)
 
@@ -118,12 +126,13 @@ in CI, and fixes trustworthy enough to open as PRs.
   uses — not decided here.
 
 ### Release readiness (found in Phase 3's final review, 2026-08-04)
-- The PyPI trusted-publisher manual setup checklist (configuring the
-  trusted publisher on PyPI's project settings to match
-  `.github/workflows/release.yml`) currently only lives in the (now-historical)
-  implementation plan file, not somewhere discoverable from `release.yml` or
-  `CONTRIBUTING.md`. Should be promoted somewhere durable before the first
-  real `v*` tag is pushed.
+- ✅ The PyPI trusted-publisher manual setup checklist used to only live in
+  the (now-historical) implementation plan file, not somewhere discoverable
+  from `release.yml` or `CONTRIBUTING.md`. Fixed 2026-08-05: promoted into
+  `CONTRIBUTING.md`'s new "Releasing" section. (The first real release,
+  `v0.5.0`, already shipped successfully using the original checklist before
+  this was promoted — this closes the "next contributor can't find it" gap
+  going forward, not a blocker that was hit.)
 - ✅ The sdist (`python -m build`'s `.tar.gz` output) used to ship the entire
   git-tracked repo (242 files, including old scaffolding zips, docs,
   `frontend/`, docker configs) because there was no `MANIFEST.in` pruning it.

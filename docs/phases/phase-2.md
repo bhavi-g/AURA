@@ -1,6 +1,6 @@
 # Phase 2 — Claude LLM backend + provider abstraction
 
-**Status:** planned
+**Status:** done (2026-07-30) — PRs [#28](https://github.com/bhavi-g/AURA/pull/28), [#29](https://github.com/bhavi-g/AURA/pull/29)
 **ADR:** [0003-llm-provider-abstraction](../adr/0003-llm-provider-abstraction.md)
 
 ## Why

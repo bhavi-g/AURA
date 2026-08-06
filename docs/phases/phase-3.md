@@ -1,6 +1,7 @@
 # Phase 3 — PyPI publish + install polish
 
-**Status:** planned
+**Status:** done (2026-08-05) — PRs [#33](https://github.com/bhavi-g/AURA/pull/33), [#34](https://github.com/bhavi-g/AURA/pull/34); released as [`aura-audit` v0.5.0](https://pypi.org/project/aura-audit/0.5.0/) on PyPI
+**ADR:** [0005-dynamic-versioning-trusted-publishing](../adr/0005-dynamic-versioning-trusted-publishing.md)
 
 ## Why
 The #1 adoption blocker for an OSS CLI is install friction. `pipx install aura-audit`
