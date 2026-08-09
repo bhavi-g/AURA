@@ -20,6 +20,8 @@ def load_findings(path) -> tuple[list[dict], float]:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return [], 0
+    if not isinstance(payload, dict):
+        return [], 0
     return payload.get("findings") or [], payload.get("score") or 0
 
 

@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from action.scripts.comment import DISCLAIMER, MARKER, render_comment
 from action.scripts.run_gate import load_findings, read_changed_files
@@ -130,3 +131,127 @@ def test_read_changed_files_strips_blank_lines(tmp_path):
 
 def test_read_changed_files_returns_empty_for_a_missing_file(tmp_path):
     assert read_changed_files(tmp_path / "nope.txt") == []
+
+
+def test_load_findings_tolerates_valid_json_that_is_not_a_dict(tmp_path):
+    path = tmp_path / "f.json"
+    path.write_text("[1, 2, 3]")
+    assert load_findings(path) == ([], 0)
+    path.write_text('"string"')
+    assert load_findings(path) == ([], 0)
+    path.write_text("42")
+    assert load_findings(path) == ([], 0)
+    path.write_text("null")
+    assert load_findings(path) == ([], 0)
+
+
+def test_run_comment_main_returns_zero_when_not_a_pr(monkeypatch):
+    from action.scripts.run_comment import main
+
+    monkeypatch.setenv("AURA_PR_NUMBER", "")
+    assert main() == 0
+
+
+def test_run_comment_main_returns_zero_with_non_dict_findings_json(tmp_path, monkeypatch):
+    from action.scripts.run_comment import main
+
+    findings_file = tmp_path / "findings.json"
+    findings_file.write_text("[1, 2, 3]")
+    monkeypatch.setenv("AURA_PR_NUMBER", "42")
+    monkeypatch.setenv("AURA_FINDINGS_JSON", str(findings_file))
+    monkeypatch.setenv("AURA_REPO", "owner/repo")
+    result = main()
+    assert result == 0
+
+
+def test_run_comment_main_returns_zero_when_upsert_fails(tmp_path, monkeypatch):
+    from action.scripts.ghcli import CommandError
+    from action.scripts.run_comment import main
+
+    findings_file = tmp_path / "findings.json"
+    findings_file.write_text(json.dumps({"findings": [], "score": 0}))
+    monkeypatch.setenv("AURA_PR_NUMBER", "42")
+    monkeypatch.setenv("AURA_FINDINGS_JSON", str(findings_file))
+    monkeypatch.setenv("AURA_REPO", "owner/repo")
+
+    with patch(
+        "action.scripts.run_comment.upsert_pr_comment",
+        side_effect=CommandError("test error"),
+    ):
+        result = main()
+        assert result == 0
+
+
+def test_run_comment_main_shows_error_gate_on_invalid_threshold(tmp_path, monkeypatch):
+    from action.scripts.run_comment import main
+
+    findings_file = tmp_path / "findings.json"
+    findings_file.write_text(json.dumps({"findings": [], "score": 0}))
+    monkeypatch.setenv("AURA_PR_NUMBER", "42")
+    monkeypatch.setenv("AURA_FINDINGS_JSON", str(findings_file))
+    monkeypatch.setenv("AURA_REPO", "owner/repo")
+    monkeypatch.setenv("AURA_FAIL_ON", "invalid-threshold")
+
+    captured_body = None
+
+    def capture_upsert(repo, pr, body, **kwargs):
+        nonlocal captured_body
+        captured_body = body
+        return "created"
+
+    with patch(
+        "action.scripts.run_comment.upsert_pr_comment",
+        side_effect=capture_upsert,
+    ):
+        result = main()
+        assert result == 0
+        assert "unknown" in captured_body
+
+
+def test_run_gate_main_returns_zero_when_no_violations(tmp_path, monkeypatch):
+    from action.scripts.run_gate import main
+
+    findings_file = tmp_path / "findings.json"
+    findings_file.write_text(json.dumps({"findings": [], "score": 0}))
+    monkeypatch.setenv("AURA_FINDINGS_JSON", str(findings_file))
+    monkeypatch.setenv("AURA_FAIL_ON", "high")
+
+    result = main()
+    assert result == 0
+
+
+def test_run_gate_main_returns_one_on_violations(tmp_path, monkeypatch):
+    from action.scripts.run_gate import main
+
+    findings_file = tmp_path / "findings.json"
+    findings_file.write_text(
+        json.dumps(
+            {
+                "findings": [
+                    {
+                        "rule_id": "reentrancy",
+                        "severity": "HIGH",
+                        "locations": [{"file": "A.sol", "line": 1}],
+                    }
+                ],
+                "score": 5.0,
+            }
+        )
+    )
+    monkeypatch.setenv("AURA_FINDINGS_JSON", str(findings_file))
+    monkeypatch.setenv("AURA_FAIL_ON", "high")
+
+    result = main()
+    assert result == 1
+
+
+def test_run_gate_main_returns_one_on_unknown_threshold(tmp_path, monkeypatch):
+    from action.scripts.run_gate import main
+
+    findings_file = tmp_path / "findings.json"
+    findings_file.write_text(json.dumps({"findings": [], "score": 0}))
+    monkeypatch.setenv("AURA_FINDINGS_JSON", str(findings_file))
+    monkeypatch.setenv("AURA_FAIL_ON", "invalid-threshold")
+
+    result = main()
+    assert result == 1

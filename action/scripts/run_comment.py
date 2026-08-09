@@ -31,17 +31,20 @@ def main() -> int:
     # empty list that would read as "this PR is clean".
     changed_findings = filter_by_files(findings, changed) if changed_ok else list(findings)
 
+    violations = []
+    gate_threshold = threshold
     try:
         violations = gate_violations(findings, threshold)
-    except ValueError:
-        violations = []
+    except ValueError as exc:
+        print(f"::warning::Invalid gate threshold: {exc}")
+        gate_threshold = "error"
 
     body = render_comment(
         all_findings=findings,
         changed_findings=changed_findings,
         score=score,
         changed_files_ok=changed_ok,
-        gate_threshold=threshold,
+        gate_threshold=gate_threshold,
         violations=violations,
         fix_pr_url=os.environ.get("AURA_FIX_PR_URL", "").strip() or None,
         fix_skip_reason=os.environ.get("AURA_FIX_SKIP_REASON", "").strip() or None,
@@ -54,7 +57,7 @@ def main() -> int:
             body,
             body_path=os.environ.get("AURA_COMMENT_BODY_PATH", "aura-comment.md"),
         )
-    except (CommandError, KeyError) as exc:
+    except (CommandError, KeyError, OSError, ValueError) as exc:
         print(f"::warning::Could not post the AURA PR comment: {exc}")
         return 0
 

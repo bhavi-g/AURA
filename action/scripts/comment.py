@@ -80,6 +80,8 @@ def render_comment(
     threshold = str(gate_threshold or "").strip().lower()
     if threshold in ("", GATE_DISABLED):
         lines.append("**Severity gate:** disabled (`fail-on: none`).")
+    elif threshold == "error":
+        lines.append("**Severity gate:** ⚠️ unknown (invalid threshold or evaluation error).")
     elif violations:
         lines.append(
             f"**Severity gate:** ❌ failed — {len(violations)} finding(s) "
