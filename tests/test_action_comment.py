@@ -160,8 +160,14 @@ def test_run_comment_main_returns_zero_with_non_dict_findings_json(tmp_path, mon
     monkeypatch.setenv("AURA_PR_NUMBER", "42")
     monkeypatch.setenv("AURA_FINDINGS_JSON", str(findings_file))
     monkeypatch.setenv("AURA_REPO", "owner/repo")
-    result = main()
-    assert result == 0
+    monkeypatch.setenv("AURA_COMMENT_BODY_PATH", str(tmp_path / "comment.md"))
+
+    with patch(
+        "action.scripts.run_comment.upsert_pr_comment",
+        return_value="created",
+    ):
+        result = main()
+        assert result == 0
 
 
 def test_run_comment_main_returns_zero_when_upsert_fails(tmp_path, monkeypatch):
