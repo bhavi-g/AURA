@@ -1,4 +1,7 @@
+import json
+
 from action.scripts.comment import DISCLAIMER, MARKER, render_comment
+from action.scripts.run_gate import load_findings, read_changed_files
 
 
 def _finding(rule="reentrancy-eth", severity="HIGH", title="Reentrancy", file="contracts/A.sol"):
@@ -97,3 +100,33 @@ def test_comment_always_carries_the_not_an_audit_disclaimer():
     """docs/NEVER_DO.md: never present AURA output as an audit."""
     assert DISCLAIMER in _render()
     assert DISCLAIMER in _render(changed_findings=[], violations=[])
+
+
+def test_load_findings_reads_the_analyze_json_payload(tmp_path):
+    path = tmp_path / "f.json"
+    path.write_text(json.dumps({"findings": [{"rule_id": "a"}], "score": 4.2}))
+    findings, score = load_findings(path)
+    assert [f["rule_id"] for f in findings] == ["a"]
+    assert score == 4.2
+
+
+def test_load_findings_tolerates_a_missing_file(tmp_path):
+    findings, score = load_findings(tmp_path / "nope.json")
+    assert findings == []
+    assert score == 0
+
+
+def test_load_findings_tolerates_malformed_json(tmp_path):
+    path = tmp_path / "f.json"
+    path.write_text("not json{")
+    assert load_findings(path) == ([], 0)
+
+
+def test_read_changed_files_strips_blank_lines(tmp_path):
+    path = tmp_path / "changed.txt"
+    path.write_text("contracts/A.sol\n\ncontracts/B.sol\n")
+    assert read_changed_files(path) == ["contracts/A.sol", "contracts/B.sol"]
+
+
+def test_read_changed_files_returns_empty_for_a_missing_file(tmp_path):
+    assert read_changed_files(tmp_path / "nope.txt") == []
