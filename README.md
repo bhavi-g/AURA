@@ -116,7 +116,7 @@ jobs:
 |---|---|---|
 | `path` | `.` | Path to analyze |
 | `solc-version` | `0.8.20` | Compiler version installed via `solc-select` |
-| `aura-version` | latest | Pin a specific `aura-audit` release |
+| `aura-version` | `""` | Pin a specific `aura-audit` release; empty installs the latest |
 | `github-token` | `${{ github.token }}` | Token for PR comments and fix PRs |
 | `fail-on` | `high` | Fail on findings at/above this severity; `none` disables |
 | `llm-provider` | — | `anthropic` or `openai`; required for fix PRs |
