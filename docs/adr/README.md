@@ -12,7 +12,10 @@ Format: `NNNN-short-title.md`. Statuses: `accepted`, `superseded`, `proposed`.
 | [0003](0003-llm-provider-abstraction.md) | LLM behind a thin wrapper; stub fallback; Claude next | accepted |
 | [0004](0004-verified-fix-loop.md) | Verify generated fixes before presenting them | accepted |
 | [0005](0005-dynamic-versioning-trusted-publishing.md) | Dynamic versioning + PyPI trusted publishing | accepted |
+| [0006](0006-composite-github-action.md) | Composite GitHub Action at the repo root | accepted |
+| [0007](0007-verified-only-fix-prs.md) | Auto-opened fix PRs carry VERIFIED fixes only | accepted |
 
 > ADRs 0001–0003 are **backfilled** from decisions already visible in the code
 > (this project is 20+ PRs in). 0004 is the decision made on 2026-07-24. 0005
-> is the decision made on 2026-08-05 (Phase 3).
+> is the decision made on 2026-08-05 (Phase 3). 0006-0007 are the decisions
+> made on 2026-08-09 (Phase 4).

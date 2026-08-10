@@ -1,6 +1,6 @@
 # Phase 4 — GitHub Action (SARIF Code Scanning + PR comments)
 
-**Status:** planned
+**Status:** shipped (2026-08-09)
 
 ## Why
 Meet developers where they review code. AURA already emits SARIF; surfacing it
