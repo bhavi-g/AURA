@@ -75,6 +75,70 @@ poetry run aura --help
 
 ---
 
+## GitHub Action
+
+Run AURA on every pull request: findings land in the Security tab via SARIF,
+a summary comment lands on the PR, and (optionally) verified fixes land as
+their own PR.
+
+```yaml
+name: aura
+
+on:
+  pull_request:
+
+permissions:
+  contents: write        # needed only for auto-fix PRs; use `read` otherwise
+  security-events: write # SARIF upload
+  pull-requests: write   # PR comment + fix PR
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required — AURA diffs against the PR base
+
+      - uses: bhavi-g/AURA@main
+        with:
+          path: contracts
+          solc-version: "0.8.20"
+          fail-on: high
+          # Optional: enables PRs containing AURA-verified fixes
+          llm-provider: anthropic
+          llm-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+### Inputs
+
+| Input | Default | Description |
+|---|---|---|
+| `path` | `.` | Path to analyze |
+| `solc-version` | `0.8.20` | Compiler version installed via `solc-select` |
+| `aura-version` | latest | Pin a specific `aura-audit` release |
+| `github-token` | `${{ github.token }}` | Token for PR comments and fix PRs |
+| `fail-on` | `high` | Fail on findings at/above this severity; `none` disables |
+| `llm-provider` | — | `anthropic` or `openai`; required for fix PRs |
+| `llm-api-key` | — | API key for that provider |
+| `open-fix-prs` | `true` | Open a PR with verified fixes (no-op without a key) |
+
+### Outputs
+
+`findings-count`, `score`, `sarif-path`.
+
+### Notes
+
+- **`fetch-depth: 0` is required.** Without it AURA cannot diff against the PR
+  base, and the comment falls back to listing every finding.
+- **Fix PRs contain only `VERIFIED` fixes** — applied, compiled, and
+  re-analyzed with the finding confirmed gone. Unverified suggestions are
+  never opened as a PR.
+- **Fix PRs are skipped on pull requests from forks.** GitHub issues a
+  read-only token there, so the fix branch cannot be pushed.
+
+---
+
 ## Basic Usage
 
 ### 1️⃣ Analyze a contract

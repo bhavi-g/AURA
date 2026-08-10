@@ -1,0 +1,31 @@
+name: aura-pr-scan
+
+on:
+  pull_request:
+
+concurrency:
+  group: aura-pr-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run AURA
+        uses: ./
+        with:
+          path: samples/contracts
+          # samples/contracts holds deliberately vulnerable fixtures, so a
+          # gate would fail every PR by design, and auto-fixing them would
+          # defeat their purpose as test data.
+          fail-on: none
+          open-fix-prs: false
