@@ -8,11 +8,37 @@ anything else; `verified()` is the second gate on top of that.
 from __future__ import annotations
 
 import json
+import subprocess
 
 from action.scripts.findings import finding_files, normalize_path
 from action.scripts.ghcli import CommandError, run
 
 FIX_BRANCH_PREFIX = "aura/auto-fixes/"
+
+
+def _extract_leading_json(text: str) -> str:
+    """Extract the first JSON object `text` starts with, ignoring trailing noise.
+
+    `aura fix --write --json` (`cli.py::fix_cmd`) prints the JSON payload and
+    then, because `--write` is set, always appends a human-readable line
+    after it ("Wrote verified fix to ..." or "Refusing to write: ..."). A
+    plain `json.loads` on that stdout fails with "Extra data" on every real
+    invocation. This mirrors the noise-tolerant parsing pattern in
+    `slither_adapter.py::_extract_json_block`, adapted for JSON-then-text
+    (Slither's wrapper banners are text-then-JSON) via `raw_decode`, which
+    parses one JSON value and reports where it ended rather than assuming
+    the whole string is JSON.
+    """
+    if not text:
+        return ""
+    stripped = text.lstrip()
+    if not stripped.startswith("{"):
+        return ""
+    try:
+        _, end = json.JSONDecoder().raw_decode(stripped)
+    except json.JSONDecodeError:
+        return ""
+    return stripped[:end]
 
 
 def fix_skip_reason(
@@ -62,7 +88,10 @@ def run_fix(path: str, rule: str, *, runner=None, timeout: int = 900) -> dict:
     """Run `aura fix` for one file/rule pair and normalize the outcome.
 
     Never raises: `aura fix` exits 1 on FAILED/REGRESSED by design, and one
-    unfixable rule must not abort the remaining targets.
+    unfixable rule must not abort the remaining targets. A slow LLM call
+    plus compile plus Slither can genuinely hit `timeout`, and
+    `subprocess.TimeoutExpired` is not an `OSError` subclass, so it is
+    caught explicitly alongside `CommandError`.
     """
     try:
         out = run(
@@ -71,11 +100,11 @@ def run_fix(path: str, rule: str, *, runner=None, timeout: int = 900) -> dict:
             check=False,
             timeout=timeout,
         )
-    except (CommandError, OSError) as exc:
+    except (CommandError, OSError, subprocess.TimeoutExpired) as exc:
         return {"file": path, "rule": rule, "verdict": "ERROR", "detail": str(exc)}
 
     try:
-        payload = json.loads(out)
+        payload = json.loads(_extract_leading_json(out))
     except json.JSONDecodeError:
         return {
             "file": path,
