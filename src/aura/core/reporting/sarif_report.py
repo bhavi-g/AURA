@@ -5,7 +5,13 @@ from pathlib import Path
 def write_sarif(findings, out_path="reports/summary.sarif"):
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     results = []
-    sev_map = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note", "INFO": "note"}
+    sev_map = {
+        "CRITICAL": "error",
+        "HIGH": "error",
+        "MEDIUM": "warning",
+        "LOW": "note",
+        "INFO": "note",
+    }
     for f in findings:
         loc = (f.get("locations") or [{}])[0]
         results.append(
