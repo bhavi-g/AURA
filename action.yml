@@ -61,10 +61,12 @@ runs:
 
     - name: Install AURA and Slither
       shell: bash
+      env:
+        AURA_VERSION: ${{ inputs.aura-version }}
       run: |
         python -m pip install -U pip
-        if [ -n "${{ inputs.aura-version }}" ]; then
-          pip install "aura-audit==${{ inputs.aura-version }}"
+        if [ -n "$AURA_VERSION" ]; then
+          pip install "aura-audit==$AURA_VERSION"
         else
           pip install aura-audit
         fi
@@ -72,17 +74,21 @@ runs:
 
     - name: Install solc
       shell: bash
+      env:
+        SOLC_VERSION: ${{ inputs.solc-version }}
       run: |
-        solc-select install "${{ inputs.solc-version }}"
-        solc-select use "${{ inputs.solc-version }}"
+        solc-select install "$SOLC_VERSION"
+        solc-select use "$SOLC_VERSION"
         solc --version
 
     - name: Analyze
       id: analyze
       shell: bash
+      env:
+        AURA_PATH: ${{ inputs.path }}
       run: |
         set -o pipefail
-        aura analyze "${{ inputs.path }}" --json --sarif aura-results.sarif > aura-findings.json
+        aura analyze "$AURA_PATH" --json --sarif aura-results.sarif > aura-findings.json
         python - <<'PY' >> "$GITHUB_OUTPUT"
         import json
         with open("aura-findings.json") as fh:
@@ -98,7 +104,7 @@ runs:
       shell: bash
       run: |
         BASE="${{ github.event.pull_request.base.ref }}"
-        if git fetch --no-tags --depth=0 origin "$BASE" 2>/dev/null \
+        if git fetch --no-tags origin "$BASE" 2>/dev/null \
            && git diff --name-only "origin/$BASE...HEAD" > aura-changed-files.txt 2>/dev/null; then
           echo "ok=true" >> "$GITHUB_OUTPUT"
         else
@@ -122,7 +128,7 @@ runs:
         AURA_LLM_PROVIDER: ${{ inputs.llm-provider }}
         ANTHROPIC_API_KEY: ${{ inputs.llm-provider == 'anthropic' && inputs.llm-api-key || '' }}
         OPENAI_API_KEY: ${{ inputs.llm-provider == 'openai' && inputs.llm-api-key || '' }}
-        AURA_LLM_KEY_PRESENT: ${{ inputs.llm-api-key }}
+        AURA_LLM_KEY_PRESENT: ${{ inputs.llm-api-key != '' }}
         AURA_OPEN_FIX_PRS: ${{ inputs.open-fix-prs }}
         AURA_IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         AURA_HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -144,6 +150,7 @@ runs:
         AURA_FINDINGS_JSON: aura-findings.json
         AURA_CHANGED_FILES: aura-changed-files.txt
         AURA_CHANGED_FILES_OK: ${{ steps.changed.outputs.ok }}
+        AURA_ANALYZE_OK: ${{ steps.analyze.outcome == 'success' }}
         AURA_FAIL_ON: ${{ inputs.fail-on }}
         AURA_FIX_PR_URL: ${{ steps.fixes.outputs.fix_pr_url }}
         AURA_FIX_SKIP_REASON: ${{ steps.fixes.outputs.fix_skip_reason }}
