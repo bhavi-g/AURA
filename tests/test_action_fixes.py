@@ -34,33 +34,67 @@ def _finding(rule="reentrancy-eth", file="contracts/A.sol", severity="HIGH"):
 
 def test_skip_when_fix_prs_are_disabled():
     reason = fix_skip_reason(
-        open_fix_prs=False, has_llm_key=True, is_fork=False, head_ref="feature"
+        open_fix_prs=False,
+        has_llm_key=True,
+        is_fork=False,
+        head_ref="feature",
+        llm_provider="anthropic",
     )
     assert reason is not None and "open-fix-prs" in reason
 
 
 def test_skip_on_fork_prs_because_the_token_is_read_only():
-    reason = fix_skip_reason(open_fix_prs=True, has_llm_key=True, is_fork=True, head_ref="feature")
+    reason = fix_skip_reason(
+        open_fix_prs=True,
+        has_llm_key=True,
+        is_fork=True,
+        head_ref="feature",
+        llm_provider="anthropic",
+    )
     assert reason is not None and "fork" in reason.lower()
 
 
 def test_skip_on_auras_own_fix_branch_to_prevent_recursion():
     reason = fix_skip_reason(
-        open_fix_prs=True, has_llm_key=True, is_fork=False, head_ref="aura/auto-fixes/pr-4"
+        open_fix_prs=True,
+        has_llm_key=True,
+        is_fork=False,
+        head_ref="aura/auto-fixes/pr-4",
+        llm_provider="anthropic",
     )
     assert reason is not None and "fix PR" in reason
 
 
+def test_skip_without_an_llm_provider_because_the_stub_cannot_verify():
+    """`llm-provider`'s documented default is empty ("Empty disables fixes"). Without
+    this guard, LLM() silently falls back to the deterministic stub and the step
+    still burns up to 900s per target producing only non-VERIFIED results."""
+    reason = fix_skip_reason(
+        open_fix_prs=True, has_llm_key=True, is_fork=False, head_ref="feature", llm_provider=""
+    )
+    assert reason is not None and "llm-provider" in reason
+
+
 def test_skip_without_an_llm_key_because_the_stub_cannot_patch():
     reason = fix_skip_reason(
-        open_fix_prs=True, has_llm_key=False, is_fork=False, head_ref="feature"
+        open_fix_prs=True,
+        has_llm_key=False,
+        is_fork=False,
+        head_ref="feature",
+        llm_provider="anthropic",
     )
     assert reason is not None and "LLM" in reason
 
 
 def test_no_skip_when_everything_is_configured():
     assert (
-        fix_skip_reason(open_fix_prs=True, has_llm_key=True, is_fork=False, head_ref="feature")
+        fix_skip_reason(
+            open_fix_prs=True,
+            has_llm_key=True,
+            is_fork=False,
+            head_ref="feature",
+            llm_provider="anthropic",
+        )
         is None
     )
 
@@ -138,6 +172,37 @@ def test_run_fix_parses_the_real_cli_shape_for_a_refused_write():
     assert result["verdict"] == "FAILED"
 
 
+def test_run_fix_maps_no_issues_detected_to_skipped_not_error():
+    """`cli.py::fix_cmd` prints this plain text (exit 0) when the file has no
+    findings when re-analyzed standalone — a normal outcome, not a parse
+    failure, and it must never be reported as VERIFIED."""
+    fake = FakeRunner([("No issues detected. Nothing to fix.\n", 0)])
+    result = run_fix("contracts/A.sol", "reentrancy-eth", runner=fake)
+    assert result["verdict"] == "SKIPPED"
+    assert result["verdict"] != "VERIFIED"
+    assert "standalone" in result["detail"]
+
+
+def test_run_fix_maps_rule_not_found_to_skipped_not_error():
+    """`plan_fix_targets` derives rules from a directory-wide analysis;
+    `aura fix` re-analyzes the file standalone, where the rule may
+    legitimately not reproduce. `cli.py` prints this exact plain-text line."""
+    fake = FakeRunner([("No finding found for rule='reentrancy-eth'.\n", 0)])
+    result = run_fix("contracts/A.sol", "reentrancy-eth", runner=fake)
+    assert result["verdict"] == "SKIPPED"
+    assert result["verdict"] != "VERIFIED"
+    assert "standalone" in result["detail"]
+
+
+def test_run_fix_still_reports_genuine_parse_failures_as_error():
+    """Unrecognized plain text (a real crash/traceback) must still be ERROR,
+    not silently reclassified as a normal skip."""
+    fake = FakeRunner([("Traceback (most recent call last):\n...\n", 1)])
+    result = run_fix("contracts/A.sol", "reentrancy-eth", runner=fake)
+    assert result["verdict"] == "ERROR"
+    assert "parse" in result["detail"]
+
+
 def test_run_fix_maps_a_timeout_to_an_error_result_without_raising():
     """`subprocess.TimeoutExpired` is not an `OSError` subclass; a slow LLM
     call plus compile plus Slither can genuinely hit the timeout, and it
@@ -193,7 +258,8 @@ def _set_base_env(monkeypatch, tmp_path, **overrides):
         "GITHUB_OUTPUT": str(tmp_path / "output.txt"),
         "AURA_PR_NUMBER": "42",
         "AURA_OPEN_FIX_PRS": "true",
-        "AURA_LLM_KEY_PRESENT": "1",
+        "AURA_LLM_KEY_PRESENT": "true",
+        "AURA_LLM_PROVIDER": "anthropic",
         "AURA_IS_FORK": "false",
         "AURA_HEAD_REF": "feature",
         "AURA_HEAD_SHA": "deadbeef",
@@ -247,12 +313,24 @@ def test_run_fixes_main_skips_and_touches_no_git_on_auras_own_fix_branch(tmp_pat
 
 
 def test_run_fixes_main_skips_and_touches_no_git_without_an_llm_key(tmp_path, monkeypatch):
-    _set_base_env(monkeypatch, tmp_path, AURA_LLM_KEY_PRESENT="")
+    _set_base_env(monkeypatch, tmp_path, AURA_LLM_KEY_PRESENT="false")
     with patch("action.scripts.run_fixes.run") as fake_run:
         assert run_fixes_main() == 0
     fake_run.assert_not_called()
     outputs = _read_outputs(tmp_path)
     assert "LLM" in outputs["fix_skip_reason"]
+
+
+def test_run_fixes_main_skips_and_touches_no_git_without_an_llm_provider(tmp_path, monkeypatch):
+    """`llm-provider`'s documented default is empty. Without this guard the
+    step would proceed and burn up to 900s per target on the deterministic
+    stub, which can never produce a VERIFIED verdict."""
+    _set_base_env(monkeypatch, tmp_path, AURA_LLM_PROVIDER="")
+    with patch("action.scripts.run_fixes.run") as fake_run:
+        assert run_fixes_main() == 0
+    fake_run.assert_not_called()
+    outputs = _read_outputs(tmp_path)
+    assert "llm-provider" in outputs["fix_skip_reason"]
 
 
 def test_run_fixes_main_emits_skip_reason_when_nothing_verifies(tmp_path, monkeypatch):
@@ -358,3 +436,254 @@ def test_run_fixes_main_happy_path_pushes_the_branch_and_opens_the_pr_once(tmp_p
     assert outputs["fix_pr_url"] == "https://github.com/owner/repo/pull/99"
     assert outputs["fix_skip_reason"] == ""
     assert (tmp_path / "fix-pr.md").exists()
+
+
+def _write_one_target_findings(tmp_path):
+    (tmp_path / "findings.json").write_text(
+        json.dumps(
+            {
+                "findings": [
+                    {
+                        "rule_id": "reentrancy-eth",
+                        "severity": "HIGH",
+                        "locations": [{"file": "contracts/A.sol", "line": 1}],
+                    }
+                ],
+                "score": 5.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "changed.txt").write_text("contracts/A.sol\n", encoding="utf-8")
+
+
+_VERIFIED_RESULT = {
+    "file": "contracts/A.sol",
+    "rule": "reentrancy-eth",
+    "verdict": "VERIFIED",
+    "detail": "ok",
+}
+
+
+def test_run_fixes_main_survives_a_timeout_preparing_the_branch(tmp_path, monkeypatch):
+    """`subprocess.TimeoutExpired` is not an `OSError` subclass; the fix-PR
+    entrypoint documents an always-exit-0 contract identical to `run_fix`'s,
+    but only `run_fix`'s own guard caught this before this fix — `main()`'s
+    git/gh calls did not."""
+    _write_one_target_findings(tmp_path)
+    _set_base_env(monkeypatch, tmp_path)
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["git", "fetch"]:
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 120))
+        return ""
+
+    with patch("action.scripts.run_fixes.run", side_effect=fake_run):
+        assert run_fixes_main() == 0
+    outputs = _read_outputs(tmp_path)
+    assert outputs["fix_skip_reason"] == "could not prepare the fix branch"
+    assert outputs["fix_pr_url"] == ""
+
+
+def test_run_fixes_main_survives_a_missing_git_binary_preparing_the_branch(tmp_path, monkeypatch):
+    """`FileNotFoundError` (an `OSError` subclass) if the `git`/`gh` binary
+    itself is missing must not escape `main()` either."""
+    _write_one_target_findings(tmp_path)
+    _set_base_env(monkeypatch, tmp_path)
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["git", "fetch"]:
+            raise FileNotFoundError("git: command not found")
+        return ""
+
+    with patch("action.scripts.run_fixes.run", side_effect=fake_run):
+        assert run_fixes_main() == 0
+    outputs = _read_outputs(tmp_path)
+    assert outputs["fix_skip_reason"] == "could not prepare the fix branch"
+
+
+def test_run_fixes_main_survives_a_missing_gh_binary_listing_existing_prs(tmp_path, monkeypatch):
+    """`gh pr list` had no guard at all before this fix."""
+    _write_one_target_findings(tmp_path)
+    _set_base_env(monkeypatch, tmp_path)
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:3] == ["gh", "pr", "list"]:
+            raise FileNotFoundError("gh: command not found")
+        return ""
+
+    with (
+        patch("action.scripts.run_fixes.run", side_effect=fake_run),
+        patch("action.scripts.run_fixes.run_fix", return_value=_VERIFIED_RESULT),
+    ):
+        assert run_fixes_main() == 0
+    outputs = _read_outputs(tmp_path)
+    assert outputs["fix_skip_reason"] == "could not open the fix PR"
+    assert outputs["fix_pr_url"] == ""
+
+
+def test_run_fixes_main_survives_a_timeout_opening_the_pr(tmp_path, monkeypatch):
+    _write_one_target_findings(tmp_path)
+    _set_base_env(monkeypatch, tmp_path)
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return ""
+        if cmd[:3] == ["gh", "pr", "create"]:
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 120))
+        return ""
+
+    with (
+        patch("action.scripts.run_fixes.run", side_effect=fake_run),
+        patch("action.scripts.run_fixes.run_fix", return_value=_VERIFIED_RESULT),
+    ):
+        assert run_fixes_main() == 0
+    outputs = _read_outputs(tmp_path)
+    assert outputs["fix_skip_reason"] == "could not open the fix PR"
+
+
+def test_run_fixes_main_stages_only_verified_files_not_a_tree_wide_glob(tmp_path, monkeypatch):
+    """A truncated write from a different, ERRORed target must never ride
+    along in the commit just because some other target in the same run
+    verified (docs/NEVER_DO.md: never claim a fix is safe without
+    verification)."""
+    (tmp_path / "findings.json").write_text(
+        json.dumps(
+            {
+                "findings": [
+                    {
+                        "rule_id": "reentrancy-eth",
+                        "severity": "HIGH",
+                        "locations": [{"file": "contracts/A.sol", "line": 1}],
+                    },
+                    {
+                        "rule_id": "tx-origin",
+                        "severity": "MEDIUM",
+                        "locations": [{"file": "contracts/B.sol", "line": 1}],
+                    },
+                ],
+                "score": 5.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "changed.txt").write_text("contracts/A.sol\ncontracts/B.sol\n", encoding="utf-8")
+    _set_base_env(monkeypatch, tmp_path)
+
+    results_by_file = {
+        "contracts/A.sol": _VERIFIED_RESULT,
+        "contracts/B.sol": {
+            "file": "contracts/B.sol",
+            "rule": "tx-origin",
+            "verdict": "ERROR",
+            "detail": "killed by timeout mid-write",
+        },
+    }
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return ""
+        if cmd[:3] == ["gh", "pr", "create"]:
+            return "https://github.com/owner/repo/pull/99\n"
+        return ""
+
+    def fake_run_fix(path, rule, **kwargs):
+        return results_by_file[path]
+
+    with (
+        patch("action.scripts.run_fixes.run", side_effect=fake_run),
+        patch("action.scripts.run_fixes.run_fix", side_effect=fake_run_fix),
+    ):
+        assert run_fixes_main() == 0
+
+    add_calls = [cmd for cmd in calls if cmd[:2] == ["git", "add"]]
+    assert len(add_calls) == 1
+    assert add_calls[0] == ["git", "add", "--", "contracts/A.sol"]
+
+
+def test_run_fixes_main_restores_the_original_ref_on_the_happy_path(tmp_path, monkeypatch):
+    """`git checkout -B` mutates the *consuming* workflow's checkout; the
+    caller's original ref must be restored before we return."""
+    _write_one_target_findings(tmp_path)
+    _set_base_env(monkeypatch, tmp_path)
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd == ["git", "rev-parse", "HEAD"]:
+            return "original123\n"
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return ""
+        if cmd[:3] == ["gh", "pr", "create"]:
+            return "https://github.com/owner/repo/pull/99\n"
+        return ""
+
+    with (
+        patch("action.scripts.run_fixes.run", side_effect=fake_run),
+        patch("action.scripts.run_fixes.run_fix", return_value=_VERIFIED_RESULT),
+    ):
+        assert run_fixes_main() == 0
+
+    assert calls[-1] == ["git", "checkout", "original123"]
+
+
+def test_run_fixes_main_restores_the_original_ref_even_when_branch_prep_fails(
+    tmp_path, monkeypatch
+):
+    """The restore must happen on every exit path, including failures — not
+    only the happy path."""
+    _write_one_target_findings(tmp_path)
+    _set_base_env(monkeypatch, tmp_path)
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd == ["git", "rev-parse", "HEAD"]:
+            return "original123\n"
+        if cmd[:2] == ["git", "fetch"]:
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 120))
+        return ""
+
+    with patch("action.scripts.run_fixes.run", side_effect=fake_run):
+        assert run_fixes_main() == 0
+
+    outputs = _read_outputs(tmp_path)
+    assert outputs["fix_skip_reason"] == "could not prepare the fix branch"
+    assert calls[-1] == ["git", "checkout", "original123"]
+
+
+def test_run_fixes_main_tolerates_a_failure_capturing_the_original_ref(tmp_path, monkeypatch):
+    """If we can't even learn the current ref, best-effort continue rather
+    than aborting the whole (bonus) fix-PR flow."""
+    _write_one_target_findings(tmp_path)
+    _set_base_env(monkeypatch, tmp_path)
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd == ["git", "rev-parse", "HEAD"]:
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 120))
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return ""
+        if cmd[:3] == ["gh", "pr", "create"]:
+            return "https://github.com/owner/repo/pull/99\n"
+        return ""
+
+    with (
+        patch("action.scripts.run_fixes.run", side_effect=fake_run),
+        patch("action.scripts.run_fixes.run_fix", return_value=_VERIFIED_RESULT),
+    ):
+        assert run_fixes_main() == 0
+
+    outputs = _read_outputs(tmp_path)
+    assert outputs["fix_pr_url"] == "https://github.com/owner/repo/pull/99"
+    # No restore attempt: we never learned what ref to restore to. The only
+    # "git checkout" call is the fix-branch creation itself.
+    checkout_calls = [cmd for cmd in calls if cmd[:2] == ["git", "checkout"]]
+    assert checkout_calls == [["git", "checkout", "-B", "aura/auto-fixes/pr-42", "deadbeef"]]

@@ -41,8 +41,32 @@ def _extract_leading_json(text: str) -> str:
     return stripped[:end]
 
 
+def _standalone_skip_detail(text: str, rule: str) -> str | None:
+    """Recognize `cli.py::fix_cmd`'s known plain-text non-error outcomes.
+
+    `plan_fix_targets` derives (file, rule) pairs from a *directory-wide*
+    analysis; `aura fix` then re-analyzes that one file *standalone*, where
+    the rule may legitimately not reproduce (or the file may have no
+    findings at all). `cli.py::fix_cmd` reports both as plain text (not
+    JSON) and returns 0 — a normal outcome, not a parse failure. The exact
+    strings mirror `cli.py`'s `typer.echo(...)` calls; do not edit `cli.py`
+    to "fix" this, its output shapes are pinned by other tests.
+    """
+    stripped = text.strip()
+    if stripped == "No issues detected. Nothing to fix.":
+        return "no issues detected when the file was analyzed standalone"
+    if stripped == f"No finding found for rule='{rule}'.":
+        return "rule did not reproduce when the file was analyzed standalone"
+    return None
+
+
 def fix_skip_reason(
-    *, open_fix_prs: bool, has_llm_key: bool, is_fork: bool, head_ref: str
+    *,
+    open_fix_prs: bool,
+    has_llm_key: bool,
+    is_fork: bool,
+    head_ref: str,
+    llm_provider: str,
 ) -> str | None:
     """Why the fix step should not run, or None if it should."""
     if not open_fix_prs:
@@ -53,6 +77,13 @@ def fix_skip_reason(
         return "fork pull requests get a read-only token, so the fix branch cannot be pushed"
     if normalize_path(head_ref).startswith(FIX_BRANCH_PREFIX):
         return "this PR is already an AURA fix PR"
+    if not str(llm_provider or "").strip():
+        # `llm-provider`'s documented default is empty, meaning "disable
+        # fixes" — but with no provider set, LLM() silently falls back to
+        # the deterministic stub, which can never produce a VERIFIED verdict.
+        # Without this check the step would still burn up to 900s per
+        # target producing only non-VERIFIED stub results.
+        return "no `llm-provider` configured (empty disables fixes; the LLM stub cannot verify)"
     if not has_llm_key:
         return (
             "no LLM API key configured (`llm-api-key`), so only the deterministic "
@@ -106,6 +137,9 @@ def run_fix(path: str, rule: str, *, runner=None, timeout: int = 900) -> dict:
     try:
         payload = json.loads(_extract_leading_json(out))
     except json.JSONDecodeError:
+        skip_detail = _standalone_skip_detail(out, rule)
+        if skip_detail is not None:
+            return {"file": path, "rule": rule, "verdict": "SKIPPED", "detail": skip_detail}
         return {
             "file": path,
             "rule": rule,
