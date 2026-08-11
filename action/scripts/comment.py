@@ -14,6 +14,12 @@ DISCLAIMER = (
     "formal verification. Treat these findings as leads, not verdicts._"
 )
 
+SCAN_INCOMPLETE_NOTICE = (
+    "**⚠️ The scan did not complete.** The Analyze step failed before it could "
+    "produce findings — any results below are stale or empty and must not be read as a "
+    "clean bill of health. Check the workflow run logs for the cause."
+)
+
 _DISPLAY_ORDER = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
 
 
@@ -44,8 +50,19 @@ def render_comment(
     violations: list[dict],
     fix_pr_url: str | None = None,
     fix_skip_reason: str | None = None,
+    analyze_ok: bool = True,
     max_rows: int = 10,
 ) -> str:
+    if not analyze_ok:
+        # A failed Analyze step degrades `findings`/`score` to `[]`/`0`, which
+        # would otherwise render as an indistinguishable-from-real "0
+        # finding(s) ... No findings ... Severity gate: passed" — the worst
+        # failure mode for a security tool. Render an explicit failure state
+        # instead of a clean bill of health.
+        return "\n".join(
+            [MARKER, "## AURA — Solidity security scan", "", SCAN_INCOMPLETE_NOTICE, "", DISCLAIMER]
+        )
+
     counts = severity_counts(all_findings)
     lines = [
         MARKER,

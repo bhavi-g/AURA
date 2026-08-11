@@ -25,6 +25,7 @@ def main() -> int:
     findings, score = load_findings(os.environ.get("AURA_FINDINGS_JSON", ""))
     changed = read_changed_files(os.environ.get("AURA_CHANGED_FILES", ""))
     changed_ok = os.environ.get("AURA_CHANGED_FILES_OK", "true").lower() == "true"
+    analyze_ok = os.environ.get("AURA_ANALYZE_OK", "true").lower() == "true"
     threshold = os.environ.get("AURA_FAIL_ON", "high")
 
     # When the diff is unavailable we show everything rather than an
@@ -48,6 +49,7 @@ def main() -> int:
         violations=violations,
         fix_pr_url=os.environ.get("AURA_FIX_PR_URL", "").strip() or None,
         fix_skip_reason=os.environ.get("AURA_FIX_SKIP_REASON", "").strip() or None,
+        analyze_ok=analyze_ok,
     )
 
     try:

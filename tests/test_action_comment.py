@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from action.scripts.comment import DISCLAIMER, MARKER, render_comment
+from action.scripts.comment import DISCLAIMER, MARKER, SCAN_INCOMPLETE_NOTICE, render_comment
 from action.scripts.run_gate import load_findings, read_changed_files
 
 
@@ -101,6 +101,30 @@ def test_comment_always_carries_the_not_an_audit_disclaimer():
     """docs/NEVER_DO.md: never present AURA output as an audit."""
     assert DISCLAIMER in _render()
     assert DISCLAIMER in _render(changed_findings=[], violations=[])
+
+
+def test_comment_shows_scan_incomplete_instead_of_a_clean_bill_of_health():
+    """A failed Analyze step degrades findings/score to []/0, which must never
+    render indistinguishably from a genuinely clean scan — "the scan crashed"
+    and "your code is clean" have to look different to the reader."""
+    body = _render(
+        all_findings=[],
+        changed_findings=[],
+        score=0,
+        violations=[],
+        analyze_ok=False,
+    )
+    assert SCAN_INCOMPLETE_NOTICE in body
+    assert "did not complete" in body
+    # None of the "everything is fine" language may appear.
+    assert "No findings" not in body
+    assert "✅" not in body
+    assert DISCLAIMER in body
+
+
+def test_comment_shows_normal_report_when_analyze_succeeded():
+    body = _render(analyze_ok=True)
+    assert SCAN_INCOMPLETE_NOTICE not in body
 
 
 def test_load_findings_reads_the_analyze_json_payload(tmp_path):
@@ -212,6 +236,34 @@ def test_run_comment_main_shows_error_gate_on_invalid_threshold(tmp_path, monkey
         result = main()
         assert result == 0
         assert "unknown" in captured_body
+
+
+def test_run_comment_main_renders_scan_incomplete_when_analyze_failed(tmp_path, monkeypatch):
+    """`action.yml` sets `AURA_ANALYZE_OK` from `steps.analyze.outcome`; when
+    it's false the rendered comment must say the scan did not complete,
+    never a clean bill of health."""
+    from action.scripts.run_comment import main
+
+    # A failed Analyze step never writes aura-findings.json, so this mirrors
+    # `load_findings`'s real degrade-to-empty path.
+    findings_file = tmp_path / "findings.json"
+    monkeypatch.setenv("AURA_PR_NUMBER", "42")
+    monkeypatch.setenv("AURA_FINDINGS_JSON", str(findings_file))
+    monkeypatch.setenv("AURA_REPO", "owner/repo")
+    monkeypatch.setenv("AURA_ANALYZE_OK", "false")
+
+    captured_body = None
+
+    def capture_upsert(repo, pr, body, **kwargs):
+        nonlocal captured_body
+        captured_body = body
+        return "created"
+
+    with patch("action.scripts.run_comment.upsert_pr_comment", side_effect=capture_upsert):
+        assert main() == 0
+
+    assert "did not complete" in captured_body
+    assert "✅" not in captured_body
 
 
 def test_run_gate_main_returns_zero_when_no_violations(tmp_path, monkeypatch):
