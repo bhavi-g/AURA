@@ -61,10 +61,11 @@ Action in CI, and fixes trustworthy enough to open as PRs.
    `aura --version` → `0.5.0`
 2. Generated fixes are **verified** (apply → compile → finding gone) before being
    presented as PR-ready (P1 — the credibility bar)
-3. 🟡 A GitHub Action posts findings on PRs and uploads SARIF to Code Scanning —
-   shipped (`action.yml`, P4) but **not yet verified end-to-end**: no dogfood
-   PR has been opened against this repo, so the Action has never actually run.
-   See `docs/sessions/2026-08-09-session.md`.
+3. ✅ A GitHub Action posts findings on PRs and uploads SARIF to Code Scanning
+   (P4, PR #36) — verified end-to-end 2026-08-11 on PR #36's own dogfood run:
+   `scan` green, Code Scanning analysis recorded `tool=AURA results=9` on
+   `refs/pull/36/merge`, and the PR comment was **updated** rather than
+   duplicated on the second run, exercising the upsert path.
 4. The static analyzer's F1 vs the golden baseline does not regress in CI
 5. Docs are good enough that a new contributor can run the full pipeline locally
 
@@ -74,8 +75,8 @@ Action in CI, and fixes trustworthy enough to open as PRs.
 2. ✅ Claude LLM backend + provider abstraction (PRs #28, #29)
 3. ✅ PyPI publish + install polish (PRs #33, #34) — `aura-audit` v0.5.0
    [live on PyPI](https://pypi.org/project/aura-audit/0.5.0/)
-4. 🟡 **GitHub Action** (SARIF Code Scanning + PR comments + verified-fix PRs) —
-   shipped in PR #36; awaiting its first real run (see success criterion 3)
+4. ✅ **GitHub Action** (SARIF Code Scanning + PR comments + verified-fix PRs) —
+   PR #36, dogfooded green on its own run (see success criterion 3)
 5. Source-text analysis endpoint + deployed backend (unblocks web paste mode)
 
 ## Pending work (backlog, tracked so we don't forget)
