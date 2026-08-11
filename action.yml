@@ -1,0 +1,189 @@
+name: "AURA Solidity Security Scan"
+description: "Detect Solidity vulnerabilities, upload SARIF to Code Scanning, comment on the PR, and open verified fixes."
+author: "Bhavish Goyal"
+
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  path:
+    description: "Path to analyze."
+    required: false
+    default: "."
+  solc-version:
+    description: "Solidity compiler version to install via solc-select."
+    required: false
+    default: "0.8.20"
+  aura-version:
+    description: >-
+      Which AURA to install. Empty installs the latest release from PyPI.
+      A version string pins that release. The literal value `local` installs
+      from the caller's checked-out working directory instead of PyPI, which
+      is how this repo dogfoods the action and how you can test an unreleased
+      fix or a fork.
+    required: false
+    default: ""
+  github-token:
+    description: "Token used for PR comments and fix PRs."
+    required: false
+    default: ${{ github.token }}
+  fail-on:
+    description: "Fail the check on findings at or above this severity: critical, high, medium, low, or none."
+    required: false
+    default: "high"
+  llm-provider:
+    description: "LLM provider for fix generation: anthropic or openai. Empty disables fixes."
+    required: false
+    default: ""
+  llm-api-key:
+    description: "API key for the chosen LLM provider. Required for fix PRs."
+    required: false
+    default: ""
+  open-fix-prs:
+    description: "Open a PR with AURA-verified fixes. Requires llm-api-key."
+    required: false
+    default: "true"
+
+outputs:
+  findings-count:
+    description: "Total findings across the scanned path."
+    value: ${{ steps.analyze.outputs.findings-count }}
+  score:
+    description: "Aggregate risk score."
+    value: ${{ steps.analyze.outputs.score }}
+  sarif-path:
+    description: "Path to the generated SARIF file."
+    value: ${{ steps.analyze.outputs.sarif-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install AURA and Slither
+      shell: bash
+      env:
+        AURA_VERSION: ${{ inputs.aura-version }}
+      run: |
+        python -m pip install -U pip
+        if [ "$AURA_VERSION" = "local" ]; then
+          # Install AURA from the caller's checkout rather than PyPI. Without
+          # this, the action can only ever run the last *published* release,
+          # so a PR that changes AURA itself is tested against code it did not
+          # change — which is how the dogfood run failed on `--sarif`, a flag
+          # that existed in the branch but not in the release on PyPI.
+          if [ ! -f pyproject.toml ]; then
+            echo "::error::aura-version: local needs the AURA source checked out" \
+                 "in the workspace, but no pyproject.toml was found. Add an" \
+                 "actions/checkout step before this action."
+            exit 1
+          fi
+          pip install .
+        elif [ -n "$AURA_VERSION" ]; then
+          pip install "aura-audit==$AURA_VERSION"
+        else
+          pip install aura-audit
+        fi
+        pip install slither-analyzer solc-select
+        # Fail loudly here rather than letting a missing/old CLI surface as a
+        # confusing option error three steps later.
+        aura --version
+
+    - name: Install solc
+      shell: bash
+      env:
+        SOLC_VERSION: ${{ inputs.solc-version }}
+      run: |
+        solc-select install "$SOLC_VERSION"
+        solc-select use "$SOLC_VERSION"
+        solc --version
+
+    - name: Analyze
+      id: analyze
+      shell: bash
+      env:
+        AURA_PATH: ${{ inputs.path }}
+      run: |
+        set -o pipefail
+        aura analyze "$AURA_PATH" --json --sarif aura-results.sarif > aura-findings.json
+        python - <<'PY' >> "$GITHUB_OUTPUT"
+        import json
+        with open("aura-findings.json") as fh:
+            data = json.load(fh)
+        print(f"findings-count={len(data.get('findings') or [])}")
+        print(f"score={data.get('score', 0)}")
+        print("sarif-path=aura-results.sarif")
+        PY
+
+    - name: Determine changed files
+      id: changed
+      if: github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        BASE="${{ github.event.pull_request.base.ref }}"
+        if git fetch --no-tags origin "$BASE" 2>/dev/null \
+           && git diff --name-only "origin/$BASE...HEAD" > aura-changed-files.txt 2>/dev/null; then
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+        else
+          : > aura-changed-files.txt
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Could not diff against origin/$BASE — check out with fetch-depth: 0."
+        fi
+
+    - name: Upload SARIF to Code Scanning
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: aura-results.sarif
+
+    - name: Open verified-fix PR
+      id: fixes
+      if: always() && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        AURA_LLM_PROVIDER: ${{ inputs.llm-provider }}
+        ANTHROPIC_API_KEY: ${{ inputs.llm-provider == 'anthropic' && inputs.llm-api-key || '' }}
+        OPENAI_API_KEY: ${{ inputs.llm-provider == 'openai' && inputs.llm-api-key || '' }}
+        AURA_LLM_KEY_PRESENT: ${{ inputs.llm-api-key != '' }}
+        AURA_OPEN_FIX_PRS: ${{ inputs.open-fix-prs }}
+        AURA_IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        AURA_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        AURA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        AURA_PR_NUMBER: ${{ github.event.pull_request.number }}
+        AURA_REPO: ${{ github.repository }}
+        AURA_FINDINGS_JSON: aura-findings.json
+        AURA_CHANGED_FILES: aura-changed-files.txt
+        PYTHONPATH: ${{ github.action_path }}
+      run: python -m action.scripts.run_fixes
+
+    - name: Comment on the PR
+      if: always() && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        AURA_PR_NUMBER: ${{ github.event.pull_request.number }}
+        AURA_REPO: ${{ github.repository }}
+        AURA_FINDINGS_JSON: aura-findings.json
+        AURA_CHANGED_FILES: aura-changed-files.txt
+        AURA_CHANGED_FILES_OK: ${{ steps.changed.outputs.ok }}
+        AURA_ANALYZE_OK: ${{ steps.analyze.outcome == 'success' }}
+        AURA_FAIL_ON: ${{ inputs.fail-on }}
+        AURA_FIX_PR_URL: ${{ steps.fixes.outputs.fix_pr_url }}
+        AURA_FIX_SKIP_REASON: ${{ steps.fixes.outputs.fix_skip_reason }}
+        AURA_COMMENT_BODY_PATH: aura-comment.md
+        PYTHONPATH: ${{ github.action_path }}
+      run: python -m action.scripts.run_comment
+
+    - name: Severity gate
+      if: always()
+      shell: bash
+      env:
+        AURA_FINDINGS_JSON: aura-findings.json
+        AURA_FAIL_ON: ${{ inputs.fail-on }}
+        PYTHONPATH: ${{ github.action_path }}
+      run: python -m action.scripts.run_gate

@@ -65,6 +65,11 @@ include = ["aura*"]
 # Formatting / Linting toolchain
 # ------------------------------
 
+[tool.pytest.ini_options]
+# Repo root on sys.path so tests can `import action.scripts.*`. The `aura`
+# package itself comes from the editable install, not from here.
+pythonpath = ["."]
+
 [tool.black]
 line-length = 100
 target-version = ["py311"]
@@ -83,7 +88,7 @@ extend-exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 100
-src_paths = ["src", "api", "cli", "tests"]
+src_paths = ["src", "api", "cli", "tests", "action"]
 known_first_party = ["aura"]
 skip = [".venv", ".aura", "reports", "build", "dist", "node_modules"]
 
@@ -97,7 +102,6 @@ exclude = [".git", ".venv", "build", "dist", ".aura", "reports", "node_modules"]
 select = ["E", "F", "B", "UP", "T20"]
 ignore = []
 
-# If you want to allow prints in certain scripts, uncomment:
-# [tool.ruff.lint.per-file-ignores]
-# "cli/*.py" = ["T201"]
-# "evaluation/*.py" = ["T201"]
+[tool.ruff.lint.per-file-ignores]
+# These are CI glue scripts whose entire job is writing to the Actions log.
+"action/scripts/*.py" = ["T201"]

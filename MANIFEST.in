@@ -11,6 +11,7 @@ prune .ruff_cache
 prune .superpowers
 prune .venv
 prune .vscode
+prune action
 prune adapters
 prune api
 prune ci
@@ -44,6 +45,7 @@ exclude CONTRIBUTING.md
 exclude MANIFEST.in
 exclude Makefile
 exclude SECURITY.md
+exclude action.yml
 exclude docker-compose.yml
 exclude mypy.ini
 exclude poetry.lock

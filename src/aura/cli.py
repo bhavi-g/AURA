@@ -17,6 +17,7 @@ from aura.core.explain import (
 from aura.core.fix import verify_fix_loop
 from aura.core.llm import LLM
 from aura.core.pipeline import run_analysis
+from aura.core.reporting.sarif_report import write_sarif
 
 # =========================================================
 # AURA CLI
@@ -89,9 +90,17 @@ def analyze(
         "--json",
         help="Output full JSON result instead of a short summary",
     ),
+    sarif_out: str = typer.Option(
+        "",
+        "--sarif",
+        help="Also write a SARIF 2.1.0 report to this path (for GitHub Code Scanning)",
+    ),
 ) -> None:
     """Run analyzers and print a tiny summary or JSON."""
     res = run_analysis(target, project_name=project)
+
+    if sarif_out:
+        write_sarif(res.get("findings", []), sarif_out)
 
     if json_out:
         # Full machine-readable output
