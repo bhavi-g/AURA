@@ -74,7 +74,8 @@ Action in CI, and fixes trustworthy enough to open as PRs.
 2. ✅ Claude LLM backend + provider abstraction (PRs #28, #29)
 3. ✅ PyPI publish + install polish (PRs #33, #34) — `aura-audit` v0.5.0
    [live on PyPI](https://pypi.org/project/aura-audit/0.5.0/)
-4. ✅ **GitHub Action** (SARIF Code Scanning + PR comments + verified-fix PRs)
+4. 🟡 **GitHub Action** (SARIF Code Scanning + PR comments + verified-fix PRs) —
+   shipped in PR #36; awaiting its first real run (see success criterion 3)
 5. Source-text analysis endpoint + deployed backend (unblocks web paste mode)
 
 ## Pending work (backlog, tracked so we don't forget)
