@@ -61,7 +61,10 @@ Action in CI, and fixes trustworthy enough to open as PRs.
    `aura --version` → `0.5.0`
 2. Generated fixes are **verified** (apply → compile → finding gone) before being
    presented as PR-ready (P1 — the credibility bar)
-3. ✅ A GitHub Action posts findings on PRs and uploads SARIF to Code Scanning (P4)
+3. 🟡 A GitHub Action posts findings on PRs and uploads SARIF to Code Scanning —
+   shipped (`action.yml`, P4) but **not yet verified end-to-end**: no dogfood
+   PR has been opened against this repo, so the Action has never actually run.
+   See `docs/sessions/2026-08-09-session.md`.
 4. The static analyzer's F1 vs the golden baseline does not regress in CI
 5. Docs are good enough that a new contributor can run the full pipeline locally
 
