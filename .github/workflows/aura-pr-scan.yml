@@ -24,6 +24,11 @@ jobs:
         uses: ./
         with:
           path: samples/contracts
+          # Dogfood against the AURA in *this checkout*, not the last PyPI
+          # release. Otherwise a PR that changes AURA is tested against code
+          # it did not change, and any new CLI surface fails until a release
+          # ships.
+          aura-version: local
           # samples/contracts holds deliberately vulnerable fixtures, so a
           # gate would fail every PR by design, and auto-fixing them would
           # defeat their purpose as test data.

@@ -16,7 +16,12 @@ inputs:
     required: false
     default: "0.8.20"
   aura-version:
-    description: "Pin a specific aura-audit release. Empty installs the latest."
+    description: >-
+      Which AURA to install. Empty installs the latest release from PyPI.
+      A version string pins that release. The literal value `local` installs
+      from the caller's checked-out working directory instead of PyPI, which
+      is how this repo dogfoods the action and how you can test an unreleased
+      fix or a fork.
     required: false
     default: ""
   github-token:
@@ -65,12 +70,28 @@ runs:
         AURA_VERSION: ${{ inputs.aura-version }}
       run: |
         python -m pip install -U pip
-        if [ -n "$AURA_VERSION" ]; then
+        if [ "$AURA_VERSION" = "local" ]; then
+          # Install AURA from the caller's checkout rather than PyPI. Without
+          # this, the action can only ever run the last *published* release,
+          # so a PR that changes AURA itself is tested against code it did not
+          # change — which is how the dogfood run failed on `--sarif`, a flag
+          # that existed in the branch but not in the release on PyPI.
+          if [ ! -f pyproject.toml ]; then
+            echo "::error::aura-version: local needs the AURA source checked out" \
+                 "in the workspace, but no pyproject.toml was found. Add an" \
+                 "actions/checkout step before this action."
+            exit 1
+          fi
+          pip install .
+        elif [ -n "$AURA_VERSION" ]; then
           pip install "aura-audit==$AURA_VERSION"
         else
           pip install aura-audit
         fi
         pip install slither-analyzer solc-select
+        # Fail loudly here rather than letting a missing/old CLI surface as a
+        # confusing option error three steps later.
+        aura --version
 
     - name: Install solc
       shell: bash

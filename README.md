@@ -116,7 +116,7 @@ jobs:
 |---|---|---|
 | `path` | `.` | Path to analyze |
 | `solc-version` | `0.8.20` | Compiler version installed via `solc-select` |
-| `aura-version` | `""` | Pin a specific `aura-audit` release; empty installs the latest |
+| `aura-version` | `""` | Empty installs the latest PyPI release; a version string pins that release; `local` installs from the caller's checkout (for testing an unreleased fix or a fork) |
 | `github-token` | `${{ github.token }}` | Token for PR comments and fix PRs |
 | `fail-on` | `high` | Fail on findings at/above this severity; `none` disables |
 | `llm-provider` | — | `anthropic` or `openai`; required for fix PRs |
