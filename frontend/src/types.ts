@@ -25,8 +25,27 @@ export interface AuditReport {
 
 export interface AnalyzeResponse {
     score: number;
-    reports: Finding[];
+    reports: { json: string; md: string };
     n_findings: number;
+}
+
+export interface AnalyzeFinding {
+    tool: string;
+    rule_id: string;
+    title: string;
+    description: string;
+    severity: string;
+    confidence: string;
+    category: string;
+    locations: { file: string; line: number; function: string }[];
+    score: number;
+}
+
+export interface AnalyzeFullResponse {
+    project_id: number;
+    findings: AnalyzeFinding[];
+    n_findings: number;
+    score: number;
 }
 
 export interface ExplainResponse {

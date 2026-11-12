@@ -4,15 +4,17 @@ import { severityFromLevel, severityColor } from '../utils';
 import type { Severity } from '../types';
 
 interface Props {
-    findings: Finding[];
+    findings?: Finding[];
+    severities?: Severity[];
 }
 
-export default function SeverityChart({ findings }: Props) {
+export default function SeverityChart({ findings, severities }: Props) {
     const counts: Record<Severity, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
-    findings.forEach((f) => {
-        const s = severityFromLevel(f.level);
-        counts[s]++;
-    });
+    if (severities) {
+        severities.forEach((s) => { counts[s]++; });
+    } else {
+        (findings ?? []).forEach((f) => { counts[severityFromLevel(f.level)]++; });
+    }
 
     const data = (Object.entries(counts) as [Severity, number][])
         .filter(([, v]) => v > 0)

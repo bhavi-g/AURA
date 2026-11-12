@@ -1,5 +1,14 @@
 import type { RiskBand, Severity } from './types';
 
+export function normalizeSeverity(raw: string): Severity {
+    const upper = raw.toUpperCase();
+    if (upper === 'INFORMATIONAL') return 'INFO';
+    if (upper === 'CRITICAL' || upper === 'HIGH' || upper === 'MEDIUM' || upper === 'LOW' || upper === 'INFO') {
+        return upper;
+    }
+    return 'INFO';
+}
+
 export function severityFromLevel(level: string): Severity {
     switch (level) {
         case 'error': return 'CRITICAL';
