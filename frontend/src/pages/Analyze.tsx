@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
-import { Play, Upload, FileCode2, ChevronDown, FileSearch, MapPin, ShieldAlert, KeyRound, Fingerprint } from 'lucide-react';
+import { Play, Upload, FileCode2, FileSearch, MapPin, ShieldAlert, KeyRound, Fingerprint } from 'lucide-react';
 import { api } from '../api';
 import RiskGauge from '../components/RiskGauge';
 import SeverityBadge from '../components/SeverityBadge';
 import SeverityChart from '../components/SeverityChart';
 import Spinner from '../components/Spinner';
 import ErrorBanner from '../components/ErrorBanner';
-import type { AnalyzeResponse } from '../types';
-import { severityFromLevel, ruleDisplayName } from '../utils';
+import type { AnalyzeFullResponse } from '../types';
+import { normalizeSeverity, ruleDisplayName } from '../utils';
 
 const SAMPLE_CONTRACTS = [
   {
@@ -56,10 +56,9 @@ export default function Analyze() {
   const [mode, setMode] = useState<'path' | 'paste'>('paste');
   const [contractPath, setContractPath] = useState('');
   const [source, setSource] = useState(SAMPLE_CONTRACT);
-  const [fullAnalysis, setFullAnalysis] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalyzeResponse | null>(null);
+  const [result, setResult] = useState<AnalyzeFullResponse | null>(null);
 
   const handleAnalyze = useCallback(async (pathOverride?: string) => {
     setLoading(true);
@@ -67,14 +66,14 @@ export default function Analyze() {
     setResult(null);
     try {
       const path = pathOverride ?? (mode === 'path' ? contractPath : '/tmp/aura_paste.sol');
-      const res = await api.analyze(path, fullAnalysis);
+      const res = await api.analyze(path);
       setResult(res);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
     } finally {
       setLoading(false);
     }
-  }, [mode, contractPath, fullAnalysis]);
+  }, [mode, contractPath]);
 
   const handleTrySample = useCallback((path: string) => {
     setMode('path');
@@ -169,23 +168,8 @@ export default function Analyze() {
             />
           )}
 
-          {/* Options & Run */}
-          <div className="flex items-center justify-between mt-8">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div
-                onClick={() => setFullAnalysis(!fullAnalysis)}
-                className={`w-10 h-6 rounded-full transition-colors duration-300 relative cursor-pointer ${fullAnalysis ? 'bg-bg-dark' : 'bg-border'
-                  }`}
-              >
-                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-300 ${fullAnalysis ? 'translate-x-[18px]' : 'translate-x-1'
-                  }`} />
-              </div>
-              <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
-                Deep analysis
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-text-muted" />
-            </label>
-
+          {/* Run */}
+          <div className="flex items-center justify-end mt-8">
             <button
               onClick={() => handleAnalyze()}
               disabled={loading || (!contractPath && mode === 'path') || (!source && mode === 'paste')}
@@ -233,7 +217,7 @@ export default function Analyze() {
                     Here's how vulnerabilities are distributed across severity levels.
                   </p>
                   <div className="max-w-sm">
-                    <SeverityChart findings={result.reports} />
+                    <SeverityChart severities={result.findings.map((f) => normalizeSeverity(f.severity))} />
                   </div>
                 </div>
               </div>
@@ -243,29 +227,33 @@ export default function Analyze() {
           {/* Finding Cards */}
           <section className="section-full bg-bg-primary">
             <div className="max-w-4xl mx-auto px-8 space-y-4">
-              {result.reports.map((f, i) => {
-                const severity = severityFromLevel(f.level);
+              {result.findings.map((f, i) => {
+                const severity = normalizeSeverity(f.severity);
+                const loc = f.locations[0];
+                const message = (f.description || '').split('\n')[0].trim();
                 return (
                   <div
-                    key={`${f.ruleId}-${f.location.startLine}`}
+                    key={`${f.rule_id}-${loc?.line ?? i}`}
                     className="bg-white rounded-2xl border border-border p-6 md:p-8 hover:shadow-lg hover:border-border-light transition-all duration-500 animate-fade-up"
                     style={{ animationDelay: `${i * 80}ms` }}
                   >
                     <div className="flex items-start justify-between gap-4 mb-3">
                       <div>
                         <div className="flex items-center gap-3 mb-1">
-                          <h3 className="text-lg font-semibold text-text-primary">{ruleDisplayName(f.ruleId)}</h3>
+                          <h3 className="text-lg font-semibold text-text-primary">{ruleDisplayName(f.rule_id)}</h3>
                           <SeverityBadge severity={severity} />
                         </div>
-                        <span className="text-xs text-text-muted code-font">{f.ruleId}</span>
+                        <span className="text-xs text-text-muted code-font">{f.rule_id}</span>
                       </div>
-                      <span className="text-2xl font-bold tabular-nums">{(f.score * 100).toFixed(0)}</span>
+                      <span className="text-2xl font-bold tabular-nums">{f.score.toFixed(1)}</span>
                     </div>
-                    <p className="text-[15px] text-text-secondary leading-relaxed mb-4">{f.message}</p>
-                    <div className="flex items-center gap-5 text-sm text-text-muted">
-                      <span className="inline-flex items-center gap-1.5"><FileSearch className="w-4 h-4" />{f.location.file}</span>
-                      <span className="inline-flex items-center gap-1.5"><MapPin className="w-4 h-4" />Line {f.location.startLine}</span>
-                    </div>
+                    <p className="text-[15px] text-text-secondary leading-relaxed mb-4">{message}</p>
+                    {loc && (
+                      <div className="flex items-center gap-5 text-sm text-text-muted">
+                        <span className="inline-flex items-center gap-1.5"><FileSearch className="w-4 h-4" />{loc.file}</span>
+                        <span className="inline-flex items-center gap-1.5"><MapPin className="w-4 h-4" />Line {loc.line}</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}

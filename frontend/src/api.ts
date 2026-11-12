@@ -1,4 +1,4 @@
-import type { AnalyzeResponse, AuditJob, AuditReport, ExplainResponse, ExplainLLMResponse } from './types';
+import type { AnalyzeFullResponse, AuditJob, AuditReport, ExplainResponse, ExplainLLMResponse } from './types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '/api';
 
@@ -22,10 +22,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
     health: () => request<{ ok: boolean }>('/health'),
 
-    analyze: (path: string, full = false) =>
-        request<AnalyzeResponse>('/analyze', {
+    analyze: (path: string) =>
+        request<AnalyzeFullResponse>('/analyze', {
             method: 'POST',
-            body: JSON.stringify({ path, full }),
+            body: JSON.stringify({ path, full: true }),
         }),
 
     explain: (path: string, maxItems?: number) =>
