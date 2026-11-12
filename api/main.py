@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from aura.core.explain import async_explain_target_with_llm, summarize_findings
@@ -17,6 +18,13 @@ SEVERITY_ORDER = {
 }
 
 app = FastAPI(title="AURA API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")

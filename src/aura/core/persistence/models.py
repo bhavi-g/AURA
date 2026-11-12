@@ -1,12 +1,16 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlmodel import Field, Relationship, SQLModel
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class Project(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
     artifacts: list["Artifact"] = Relationship(back_populates="project")
 
 
@@ -23,7 +27,7 @@ class Run(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     artifact_id: int = Field(foreign_key="artifact.id")
     tool: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
     artifact: Artifact = Relationship(back_populates="runs")
     findings: list["Finding"] = Relationship(back_populates="run")
 
