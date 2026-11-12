@@ -11,6 +11,7 @@ from .scoring.rules_v0 import aggregate_score, score_finding
 def run_analysis(target: str, project_name: str):
     tools = [SlitherAnalyzer(), MythrilAnalyzer()]
     all_findings = []
+    tool_errors = []
 
     # Run tools and score each finding
     for t in tools:
@@ -18,6 +19,8 @@ def run_analysis(target: str, project_name: str):
         for f in findings:
             f["score"] = score_finding(f)
         all_findings.extend(findings)
+        if not findings and getattr(t, "last_error", None):
+            tool_errors.append({"tool": t.name, "error": t.last_error})
 
     # Persistence: project, artifact, run
     project, artifact, run = crud.ensure_entities(
@@ -37,4 +40,5 @@ def run_analysis(target: str, project_name: str):
         "n_findings": len(all_findings),
         "score": score,
         "reports": {"json": json_path, "md": md_path},
+        "tool_errors": tool_errors,
     }

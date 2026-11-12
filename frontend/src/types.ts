@@ -46,6 +46,7 @@ export interface AnalyzeFullResponse {
     findings: AnalyzeFinding[];
     n_findings: number;
     score: number;
+    tool_errors: { tool: string; error: string }[];
 }
 
 export interface ExplainResponse {
