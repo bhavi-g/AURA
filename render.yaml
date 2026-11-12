@@ -6,7 +6,7 @@ services:
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://your-backend-service.onrender.com
+        value: https://aura-yab0.onrender.com
     routes:
       - type: rewrite
         source: /*
