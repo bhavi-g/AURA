@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Play, Upload, FileCode2, ChevronDown, FileSearch, MapPin } from 'lucide-react';
+import { Play, Upload, FileCode2, ChevronDown, FileSearch, MapPin, ShieldAlert, KeyRound, Fingerprint } from 'lucide-react';
 import { api } from '../api';
 import RiskGauge from '../components/RiskGauge';
 import SeverityBadge from '../components/SeverityBadge';
@@ -8,6 +8,27 @@ import Spinner from '../components/Spinner';
 import ErrorBanner from '../components/ErrorBanner';
 import type { AnalyzeResponse } from '../types';
 import { severityFromLevel, ruleDisplayName } from '../utils';
+
+const SAMPLE_CONTRACTS = [
+  {
+    label: 'Reentrancy',
+    description: 'A vault that sends ETH before updating balances.',
+    path: 'contracts/ReentrancyDemo.sol',
+    icon: ShieldAlert,
+  },
+  {
+    label: 'Missing Access Control',
+    description: 'Anyone can drain the contract — no owner check.',
+    path: 'contracts/AccessControl.sol',
+    icon: KeyRound,
+  },
+  {
+    label: 'tx.origin Authentication',
+    description: 'Auth relies on tx.origin, phishable via a malicious contract.',
+    path: 'contracts/TxOrigin.sol',
+    icon: Fingerprint,
+  },
+];
 
 const SAMPLE_CONTRACT = `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
@@ -40,12 +61,12 @@ export default function Analyze() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
 
-  const handleAnalyze = useCallback(async () => {
+  const handleAnalyze = useCallback(async (pathOverride?: string) => {
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const path = mode === 'path' ? contractPath : '/tmp/aura_paste.sol';
+      const path = pathOverride ?? (mode === 'path' ? contractPath : '/tmp/aura_paste.sol');
       const res = await api.analyze(path, fullAnalysis);
       setResult(res);
     } catch (err: unknown) {
@@ -54,6 +75,12 @@ export default function Analyze() {
       setLoading(false);
     }
   }, [mode, contractPath, fullAnalysis]);
+
+  const handleTrySample = useCallback((path: string) => {
+    setMode('path');
+    setContractPath(path);
+    handleAnalyze(path);
+  }, [handleAnalyze]);
 
   return (
     <div className="min-h-screen">
@@ -69,6 +96,29 @@ export default function Analyze() {
           <p className="text-lg md:text-xl text-text-muted max-w-lg mx-auto leading-relaxed animate-fade-up delay-200">
             Paste your Solidity code or point to a file. AURA runs a comprehensive security scan in seconds.
           </p>
+        </div>
+      </section>
+
+      {/* Sample Contracts */}
+      <section className="section-full bg-white border-b border-border">
+        <div className="max-w-4xl mx-auto px-8 pb-16">
+          <p className="text-[13px] font-medium uppercase tracking-[0.2em] text-text-muted mb-6 text-center">
+            Or try a sample contract
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {SAMPLE_CONTRACTS.map(({ label, description, path, icon: Icon }) => (
+              <button
+                key={path}
+                onClick={() => handleTrySample(path)}
+                disabled={loading}
+                className="text-left bg-white border border-border rounded-2xl p-6 hover:border-text-muted hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Icon className="w-5 h-5 text-text-muted mb-3" />
+                <h3 className="text-sm font-semibold text-text-primary mb-1.5">{label}</h3>
+                <p className="text-sm text-text-muted leading-relaxed">{description}</p>
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -137,7 +187,7 @@ export default function Analyze() {
             </label>
 
             <button
-              onClick={handleAnalyze}
+              onClick={() => handleAnalyze()}
               disabled={loading || (!contractPath && mode === 'path') || (!source && mode === 'paste')}
               className="flex items-center gap-2.5 px-8 py-3 bg-bg-dark hover:bg-black text-white rounded-full text-sm font-semibold transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 hover:shadow-lg active:scale-100"
             >
