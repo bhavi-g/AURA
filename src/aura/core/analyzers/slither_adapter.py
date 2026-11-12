@@ -11,17 +11,19 @@ from typing import Any
 Finding = dict[str, Any]  # simple, test-friendly shape
 
 
-def _run_cmd(cmd: str, timeout: int = 120) -> str:
-    """Run a shell command, returning stdout (even on non-zero exit)."""
+def _run_cmd(cmd: str, timeout: int = 120) -> tuple[str, str | None]:
+    """Run a shell command, returning (stdout, error). error is None on a clean run."""
     try:
-        return subprocess.check_output(
+        out = subprocess.check_output(
             cmd, shell=True, text=True, stderr=subprocess.STDOUT, timeout=timeout
         )
+        return out, None
     except subprocess.CalledProcessError as e:
-        # Slither may return non-zero when findings exist; still parse stdout
-        return e.output or ""
+        # Slither may return non-zero when findings exist; still try to parse stdout,
+        # but keep the error in case there's nothing usable in the output.
+        return e.output or "", f"exited {e.returncode}: {(e.output or '').strip()[-300:]}"
     except subprocess.TimeoutExpired:
-        return ""
+        return "", f"timed out after {timeout}s"
 
 
 def _extract_json_block(text: str) -> str:
@@ -41,23 +43,31 @@ def _extract_json_block(text: str) -> str:
 class SlitherAnalyzer:
     name = "slither"
 
+    def __init__(self) -> None:
+        self.last_error: str | None = None
+
     def run(self, target: str) -> list[Finding]:
         """
         Run Slither and normalize output to a list of Finding dicts.
-        """
-        cmds: list[str] = []
 
-        # Prefer a real slither on PATH (venv)
+        On failure, returns [] and records the reason in `self.last_error`
+        so callers can tell "no vulnerabilities found" apart from
+        "the scanner didn't actually run".
+        """
+        self.last_error = None
+
+        cmds: list[str] = []
         if shutil.which("slither"):
             cmds.append(f"slither {shlex.quote(target)} --json -")
-
         # pipx fallback (isolated env) — sometimes prints banners before JSON
         cmds.append(f"pipx run --spec slither-analyzer slither {shlex.quote(target)} --json -")
 
         raw_out = ""
+        err: str | None = None
         for cmd in cmds:
-            raw_out = _run_cmd(cmd)
+            raw_out, err = _run_cmd(cmd)
             if raw_out.strip():
+                err = None
                 break
 
         # Dump raw output for debugging (best-effort)
@@ -71,15 +81,18 @@ class SlitherAnalyzer:
             pass
 
         if not raw_out.strip():
+            self.last_error = err or "slither produced no output"
             return []
 
         json_text = _extract_json_block(raw_out)
         if not json_text:
+            self.last_error = err or "slither output did not contain JSON"
             return []
 
         try:
             data = json.loads(json_text)
         except json.JSONDecodeError:
+            self.last_error = "slither output was not valid JSON"
             return []
 
         # Slither JSON structure (v0.11.x): {"success": bool, "results": {"detectors": [...]}}

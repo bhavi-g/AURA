@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Play, Upload, FileCode2, FileSearch, MapPin, ShieldAlert, KeyRound, Fingerprint } from 'lucide-react';
+import { Play, Upload, FileCode2, FileSearch, MapPin, ShieldAlert, KeyRound, Fingerprint, AlertTriangle, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import RiskGauge from '../components/RiskGauge';
 import SeverityBadge from '../components/SeverityBadge';
@@ -59,15 +59,33 @@ export default function Analyze() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeFullResponse | null>(null);
+  const [analyzedPath, setAnalyzedPath] = useState<string | null>(null);
+  const [explainSummary, setExplainSummary] = useState<string | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const handleAnalyze = useCallback(async (pathOverride?: string) => {
+    const path = pathOverride ?? (mode === 'path' ? contractPath : '/tmp/aura_paste.sol');
     setLoading(true);
     setError(null);
     setResult(null);
+    setAnalyzedPath(null);
+    setExplainSummary(null);
+    setAiExplanation(null);
+    setAiError(null);
     try {
-      const path = pathOverride ?? (mode === 'path' ? contractPath : '/tmp/aura_paste.sol');
       const res = await api.analyze(path);
       setResult(res);
+      setAnalyzedPath(path);
+      if (res.n_findings > 0) {
+        setExplainLoading(true);
+        api.explain(path, 3)
+          .then((r) => setExplainSummary(r.summary))
+          .catch(() => { /* plain-English summary is a nice-to-have; ignore failures */ })
+          .finally(() => setExplainLoading(false));
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
     } finally {
@@ -80,6 +98,20 @@ export default function Analyze() {
     setContractPath(path);
     handleAnalyze(path);
   }, [handleAnalyze]);
+
+  const handleAiExplain = useCallback(async () => {
+    if (!analyzedPath) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await api.explainLLM(analyzedPath);
+      setAiExplanation(res.explanation);
+    } catch (err: unknown) {
+      setAiError(err instanceof Error ? err.message : 'AI explanation is unavailable right now.');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [analyzedPath]);
 
   return (
     <div className="min-h-screen">
@@ -201,6 +233,21 @@ export default function Analyze() {
       {/* Results */}
       {result && (
         <>
+          {/* Scanner Warning */}
+          {result.tool_errors.length > 0 && (
+            <section className="py-6 bg-white border-t border-border">
+              <div className="max-w-3xl mx-auto px-8">
+                <div className="flex items-center gap-3 bg-warning/10 border border-warning/25 rounded-xl px-5 py-4">
+                  <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
+                  <p className="text-sm text-warning flex-1">
+                    Scanner issue: {result.tool_errors.map((e) => `${e.tool} — ${e.error}`).join('; ')}.
+                    Results below may be incomplete, not a clean bill of health.
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Score Section */}
           <section className="section-full bg-white border-t border-border">
             <div className="section-inner">
@@ -259,6 +306,53 @@ export default function Analyze() {
               })}
             </div>
           </section>
+
+          {/* Plain-English Summary */}
+          {(explainSummary || explainLoading) && (
+            <section className="section-full bg-white border-t border-border">
+              <div className="max-w-3xl mx-auto px-8 py-16">
+                <p className="text-[13px] font-medium uppercase tracking-[0.15em] text-text-muted mb-4">
+                  Plain-English Summary
+                </p>
+                {explainLoading ? (
+                  <Spinner label="Summarizing findings..." />
+                ) : (
+                  <p className="text-base text-text-secondary leading-relaxed whitespace-pre-line">
+                    {explainSummary}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* AI-Powered Explanation */}
+          {result.n_findings > 0 && (
+            <section className="section-full bg-bg-primary border-t border-border">
+              <div className="max-w-3xl mx-auto px-8 py-16">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <p className="text-[13px] font-medium uppercase tracking-[0.15em] text-text-muted">
+                    AI-Powered Explanation
+                  </p>
+                  {!aiExplanation && !aiLoading && (
+                    <button
+                      onClick={handleAiExplain}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-bg-dark hover:bg-black text-white rounded-full text-sm font-semibold transition-all duration-300 hover:scale-105"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Explain with AI
+                    </button>
+                  )}
+                </div>
+                {aiLoading && <Spinner label="Asking the AI to explain these findings..." />}
+                {aiError && <ErrorBanner message={aiError} onRetry={handleAiExplain} />}
+                {aiExplanation && (
+                  <p className="text-base text-text-secondary leading-relaxed whitespace-pre-line">
+                    {aiExplanation}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>
